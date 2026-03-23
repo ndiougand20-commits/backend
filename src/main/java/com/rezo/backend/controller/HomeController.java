@@ -10,4 +10,9 @@ public class HomeController {
     public String home() {
         return "REZO BACKEND OK 🚀";
     }
+
+    @GetMapping("/ping")
+    public String ping() {
+        return "pong";
+    }
 }
