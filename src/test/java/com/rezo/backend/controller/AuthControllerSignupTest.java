@@ -2,6 +2,7 @@ package com.rezo.backend.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rezo.backend.dto.auth.SignupRequest;
+import com.rezo.backend.service.JwtService;
 import com.rezo.entities.Pack;
 import com.rezo.entities.Profile;
 import com.rezo.entities.User;
@@ -52,6 +53,9 @@ class AuthControllerSignupTest {
     @Mock
     private SchoolRepository schoolRepository;
 
+    @Mock
+    private JwtService jwtService;
+
     private MockMvc mockMvc;
     private ObjectMapper objectMapper;
 
@@ -62,7 +66,8 @@ class AuthControllerSignupTest {
                 packRepository,
                 profileRepository,
                 companyRepository,
-                schoolRepository
+                schoolRepository,
+                jwtService
         );
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
         objectMapper = new ObjectMapper();

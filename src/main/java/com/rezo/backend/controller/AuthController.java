@@ -1,7 +1,10 @@
 package com.rezo.backend.controller;
 
+import com.rezo.backend.dto.auth.LoginRequest;
+import com.rezo.backend.dto.auth.LoginResponse;
 import com.rezo.backend.dto.auth.SignupRequest;
 import com.rezo.backend.dto.auth.SignupResponse;
+import com.rezo.backend.service.JwtService;
 import com.rezo.entities.Company;
 import com.rezo.entities.Pack;
 import com.rezo.entities.Profile;
@@ -53,13 +56,15 @@ public class AuthController {
     private final CompanyRepository companyRepository;
     private final SchoolRepository schoolRepository;
     private final BCryptPasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
 
     public AuthController(
             UserRepository userRepository,
             PackRepository packRepository,
             ProfileRepository profileRepository,
             CompanyRepository companyRepository,
-            SchoolRepository schoolRepository
+            SchoolRepository schoolRepository,
+            JwtService jwtService
     ) {
         this.userRepository = userRepository;
         this.packRepository = packRepository;
@@ -67,6 +72,7 @@ public class AuthController {
         this.companyRepository = companyRepository;
         this.schoolRepository = schoolRepository;
         this.passwordEncoder = new BCryptPasswordEncoder();
+        this.jwtService = jwtService;
     }
 
     @Operation(summary = "Inscription multi-profils", description = "Cree un compte User et le profil associe selon le role")
@@ -115,6 +121,49 @@ public class AuthController {
         } catch (BadRequestException exception) {
             LOGGER.warn("Signup invalide: {}", exception.getMessage());
             return ResponseEntity.badRequest().body(Map.of("message", exception.getMessage()));
+        }
+    }
+
+    @Operation(summary = "Login", description = "Authentification et generation du token JWT")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Login reussi, token JWT retourne"),
+            @ApiResponse(responseCode = "400", description = "Payload invalide"),
+            @ApiResponse(responseCode = "401", description = "Email ou mot de passe incorrect")
+    })
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+        if (request == null || isBlank(request.getEmail()) || isBlank(request.getPassword())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Email et mot de passe obligatoires"));
+        }
+        Optional<User> optUser = userRepository.findByEmail(request.getEmail().trim().toLowerCase(Locale.ROOT));
+        if (optUser.isEmpty() || !passwordEncoder.matches(request.getPassword(), optUser.get().getPasswordHash())) {
+            LOGGER.warn("Login echoue pour email={}", request.getEmail());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Email ou mot de passe incorrect"));
+        }
+        String token = jwtService.generateToken(optUser.get());
+        LOGGER.info("Login reussi pour email={}", optUser.get().getEmail());
+        return ResponseEntity.ok(new LoginResponse(token));
+    }
+
+    @Operation(summary = "Suppression tous les utilisateurs (dev/test)", description = "⚠️ DANGER: Supprime TOUS les comptes Users et leurs profils. Utiliser UNIQUEMENT en dev/test.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Tous les utilisateurs ont ete supprimes")
+    })
+    @DeleteMapping("/users")
+    @Transactional
+    public ResponseEntity<?> deleteAllUsers() {
+        try {
+            profileRepository.deleteAll();
+            companyRepository.deleteAll();
+            schoolRepository.deleteAll();
+            long deletedCount = userRepository.count();
+            userRepository.deleteAll();
+            LOGGER.warn("DANGER: Tous les utilisateurs ont ete supprimes (count={})", deletedCount);
+            return ResponseEntity.ok(Map.of("message", "Tous les utilisateurs ont ete supprimes", "count", deletedCount));
+        } catch (Exception exception) {
+            LOGGER.error("Erreur lors de la suppression en masse: {}", exception.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Erreur lors de la suppression de masse"));
         }
     }
 
