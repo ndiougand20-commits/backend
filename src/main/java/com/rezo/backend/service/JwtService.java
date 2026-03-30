@@ -1,8 +1,12 @@
 package com.rezo.backend.service;
 
 import com.rezo.entities.User;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -12,6 +16,8 @@ import java.util.Date;
 
 @Service
 public class JwtService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(JwtService.class);
 
     private final SecretKey secretKey;
     private final long expirationMs;
@@ -37,5 +43,31 @@ public class JwtService {
                 .expiration(expiry)
                 .signWith(secretKey)
                 .compact();
+    }
+
+    public Claims extractClaims(String token) {
+        return Jwts.parser()
+                .verifyWith(secretKey)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+    }
+
+    public String extractSubject(String token) {
+        return extractClaims(token).getSubject();
+    }
+
+    public String extractRole(String token) {
+        return extractClaims(token).get("role", String.class);
+    }
+
+    public boolean isTokenValid(String token) {
+        try {
+            Claims claims = extractClaims(token);
+            return claims.getExpiration().after(new Date());
+        } catch (JwtException | IllegalArgumentException exception) {
+            LOGGER.warn("Token JWT invalide: {}", exception.getMessage());
+            return false;
+        }
     }
 }
