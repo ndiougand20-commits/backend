@@ -13,6 +13,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     Optional<User> findByEmail(String email);
     boolean existsByEmail(String email);
 
+    @Query("select u from User u left join fetch u.pack where u.id = :userId")
+    Optional<User> findByIdWithPack(@Param("userId") UUID userId);
+
     @Query("select u.id from User u where lower(u.email) = lower(:email)")
     Optional<UUID> findIdByEmail(@Param("email") String email);
 
