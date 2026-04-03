@@ -2,6 +2,7 @@ package com.rezo.backend.dto.user;
 
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public class UserMeResponse {
@@ -13,7 +14,13 @@ public class UserMeResponse {
     private String telephone;
     private String role;
     private String avatarUrl;
+    private UUID packId;
     private String packNom;
+    private String packCible;
+    private Set<String> packFeatures;
+    private Boolean canManageOffers;
+    private Boolean canUseMessaging;
+    private Boolean canUseAiChat;
     private LocalDateTime createdAt;
     private Map<String, Object> profil;
 
@@ -38,8 +45,26 @@ public class UserMeResponse {
     public String getAvatarUrl() { return avatarUrl; }
     public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
 
+    public UUID getPackId() { return packId; }
+    public void setPackId(UUID packId) { this.packId = packId; }
+
     public String getPackNom() { return packNom; }
     public void setPackNom(String packNom) { this.packNom = packNom; }
+
+    public String getPackCible() { return packCible; }
+    public void setPackCible(String packCible) { this.packCible = packCible; }
+
+    public Set<String> getPackFeatures() { return packFeatures; }
+    public void setPackFeatures(Set<String> packFeatures) { this.packFeatures = packFeatures; }
+
+    public Boolean getCanManageOffers() { return canManageOffers; }
+    public void setCanManageOffers(Boolean canManageOffers) { this.canManageOffers = canManageOffers; }
+
+    public Boolean getCanUseMessaging() { return canUseMessaging; }
+    public void setCanUseMessaging(Boolean canUseMessaging) { this.canUseMessaging = canUseMessaging; }
+
+    public Boolean getCanUseAiChat() { return canUseAiChat; }
+    public void setCanUseAiChat(Boolean canUseAiChat) { this.canUseAiChat = canUseAiChat; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

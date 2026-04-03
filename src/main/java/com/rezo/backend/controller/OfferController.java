@@ -2,6 +2,7 @@ package com.rezo.backend.controller;
 
 import com.rezo.backend.dto.offer.OfferRequest;
 import com.rezo.backend.dto.offer.OfferResponse;
+import com.rezo.backend.service.PackRules;
 import com.rezo.entities.Company;
 import com.rezo.entities.Offer;
 import com.rezo.entities.School;
@@ -103,6 +104,7 @@ public class OfferController {
             User user = resolveAuthenticatedUser(principal);
             Offer offer = new Offer();
             attachOwner(offer, user);
+            ensurePackAllowsOfferManagement(user);
             applyRequest(offer, request, true);
             offer = offerRepository.save(offer);
 
@@ -142,12 +144,15 @@ public class OfferController {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
                         .body(Map.of("message", "Vous ne pouvez modifier que votre propre offre"));
             }
+            ensurePackAllowsOfferManagement(user);
             applyRequest(offer, request, false);
             offer = offerRepository.save(offer);
             LOGGER.info("Offre mise a jour id={} userId={}", offer.getId(), user.getId());
             return ResponseEntity.ok(toResponse(offer));
         } catch (UnauthorizedException exception) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", exception.getMessage()));
+        } catch (ForbiddenException exception) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", exception.getMessage()));
         } catch (BadRequestException exception) {
             return ResponseEntity.badRequest().body(Map.of("message", exception.getMessage()));
         }
@@ -174,6 +179,7 @@ public class OfferController {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
                         .body(Map.of("message", "Vous ne pouvez supprimer que votre propre offre"));
             }
+            ensurePackAllowsOfferManagement(user);
             int deleted = offerRepository.deleteByIdDirect(id);
             if (deleted == 0) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Offre introuvable"));
@@ -182,6 +188,8 @@ public class OfferController {
             return ResponseEntity.ok(Map.of("message", "Offre supprimee avec succes"));
         } catch (UnauthorizedException exception) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", exception.getMessage()));
+        } catch (ForbiddenException exception) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", exception.getMessage()));
         }
     }
 
@@ -210,6 +218,12 @@ public class OfferController {
             return;
         }
         throw new ForbiddenException("Seuls les utilisateurs ECOLE ou ENTREPRISE peuvent publier une offre");
+    }
+
+    private void ensurePackAllowsOfferManagement(User user) {
+        if (!PackRules.canManageOffers(user)) {
+            throw new ForbiddenException("Votre pack actuel ne permet pas de publier ou gerer des offres");
+        }
     }
 
     private UUID resolveOwnerUserId(Offer offer) {

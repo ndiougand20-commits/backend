@@ -5,6 +5,7 @@ import com.rezo.backend.dto.offer.OfferRequest;
 import com.rezo.entities.Company;
 import com.rezo.entities.Offer;
 import com.rezo.entities.School;
+import com.rezo.entities.Pack;
 import com.rezo.entities.User;
 import com.rezo.entities.enums.CompanySize;
 import com.rezo.entities.enums.OfferType;
@@ -124,6 +125,28 @@ class OfferControllerTest {
     }
 
     @Test
+    void createOfferShouldReturn403WhenPackDoesNotAllowPublishing() throws Exception {
+        User user = buildUser(ownerId, UserRole.ENTREPRISE);
+        Pack freePack = new Pack();
+        freePack.setNom("FREE");
+        freePack.setFeatures("MATCHING_BASIC,MESSAGERIE_LIMITEE");
+        user.setPack(freePack);
+
+        Company company = buildCompany(user);
+        setField(company, "id", companyId);
+
+        when(userRepository.findById(ownerId)).thenReturn(Optional.of(user));
+        when(companyRepository.findByUserId(ownerId)).thenReturn(Optional.of(company));
+
+        mockMvc.perform(post("/api/offers")
+                        .principal(principal(ownerId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(validRequest())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Votre pack actuel ne permet pas de publier ou gerer des offres"));
+    }
+
+    @Test
     void updateOfferShouldReturn403WhenNotOwner() throws Exception {
         User loggedUser = buildUser(ownerId, UserRole.ENTREPRISE);
         User otherUser = buildUser(otherUserId, UserRole.ENTREPRISE);
@@ -220,12 +243,17 @@ class OfferControllerTest {
     }
 
     private User buildUser(UUID userId, UserRole role) {
+        Pack pack = new Pack();
+        pack.setNom("BUSINESS_PLUS");
+        pack.setFeatures("OFFERS_PUBLISH,MESSAGERIE_ILLIMITEE,AI_CHAT_ACCESS");
+
         User user = new User();
         setField(user, "id", userId);
         user.setEmail("owner@rezo.com");
         user.setPrenom("Owner");
         user.setNom("Test");
         user.setRole(role);
+        user.setPack(pack);
         return user;
     }
 
