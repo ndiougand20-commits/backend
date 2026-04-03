@@ -2,7 +2,10 @@ package com.rezo.backend.controller;
 
 import com.rezo.backend.dto.user.UpdateUserRequest;
 import com.rezo.backend.dto.user.UserMeResponse;
+import com.rezo.backend.dto.user.UserPackUpdateRequest;
+import com.rezo.backend.service.PackRules;
 import com.rezo.entities.Company;
+import com.rezo.entities.Pack;
 import com.rezo.entities.Profile;
 import com.rezo.entities.School;
 import com.rezo.entities.User;
@@ -10,6 +13,7 @@ import com.rezo.entities.enums.CompanySize;
 import com.rezo.entities.enums.SchoolStatus;
 import com.rezo.entities.enums.UserRole;
 import com.rezo.repositories.CompanyRepository;
+import com.rezo.repositories.PackRepository;
 import com.rezo.repositories.ProfileRepository;
 import com.rezo.repositories.SchoolRepository;
 import com.rezo.repositories.UserRepository;
@@ -51,15 +55,18 @@ public class UserController {
     private final ProfileRepository profileRepository;
     private final CompanyRepository companyRepository;
     private final SchoolRepository schoolRepository;
+    private final PackRepository packRepository;
 
     public UserController(UserRepository userRepository,
                           ProfileRepository profileRepository,
                           CompanyRepository companyRepository,
-                          SchoolRepository schoolRepository) {
+                          SchoolRepository schoolRepository,
+                          PackRepository packRepository) {
         this.userRepository = userRepository;
         this.profileRepository = profileRepository;
         this.companyRepository = companyRepository;
         this.schoolRepository = schoolRepository;
+        this.packRepository = packRepository;
     }
 
     // ─── GET /api/users/me ───────────────────────────────────────────────
@@ -150,6 +157,47 @@ public class UserController {
         return ResponseEntity.ok(toMeResponse(user));
     }
 
+    // ─── PUT /api/users/me/pack ──────────────────────────────────────────
+
+    @Operation(summary = "Changer mon pack", description = "Permet a l'utilisateur connecte de souscrire ou basculer vers un pack compatible avec son role")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Pack mis a jour"),
+            @ApiResponse(responseCode = "400", description = "Pack incompatible ou payload invalide"),
+            @ApiResponse(responseCode = "401", description = "Non authentifie"),
+            @ApiResponse(responseCode = "404", description = "Utilisateur ou pack introuvable")
+    })
+    @org.springframework.web.bind.annotation.RequestMapping(value = "/me/pack", method = {org.springframework.web.bind.annotation.RequestMethod.PUT, org.springframework.web.bind.annotation.RequestMethod.PATCH})
+    @Transactional
+    public ResponseEntity<?> updateMyPack(@RequestBody UserPackUpdateRequest request, Principal principal) {
+        UUID userId = extractUserId(principal);
+        if (request == null || request.getPackId() == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Le champ packId est obligatoire"));
+        }
+
+        Optional<User> optUser = userRepository.findByIdWithPack(userId);
+        if (optUser.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "Utilisateur introuvable"));
+        }
+
+        Optional<Pack> optPack = packRepository.findById(request.getPackId());
+        if (optPack.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "Pack introuvable"));
+        }
+
+        User user = optUser.get();
+        Pack pack = optPack.get();
+        if (!PackRules.isPackCompatible(pack, user.getRole())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Ce pack n'est pas compatible avec votre role"));
+        }
+
+        user.setPack(pack);
+        userRepository.save(user);
+        LOGGER.info("Pack mis a jour pour userId={} pack={}", userId, pack.getNom());
+        return ResponseEntity.ok(toMeResponse(user));
+    }
+
     // ─── DELETE /api/users/me ────────────────────────────────────────────
 
     @Operation(summary = "Supprimer mon compte", description = "Supprime le user connecte et son profil associe")
@@ -192,7 +240,13 @@ public class UserController {
         dto.setTelephone(user.getTelephone());
         dto.setRole(user.getRole().name());
         dto.setAvatarUrl(user.getAvatarUrl());
+        dto.setPackId(user.getPack() != null ? user.getPack().getId() : null);
         dto.setPackNom(user.getPack() != null ? user.getPack().getNom() : null);
+        dto.setPackCible(user.getPack() != null ? user.getPack().getCible() : null);
+        dto.setPackFeatures(user.getPack() != null ? PackRules.parseCsv(user.getPack().getFeatures()) : new HashSet<>());
+        dto.setCanManageOffers(PackRules.canManageOffers(user));
+        dto.setCanUseMessaging(PackRules.canUseMessaging(user));
+        dto.setCanUseAiChat(PackRules.canUseAiChat(user));
         dto.setCreatedAt(user.getCreatedAt());
         dto.setProfil(buildProfilMap(user));
         return dto;

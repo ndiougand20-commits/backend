@@ -36,7 +36,7 @@ public class SecurityConfig {
                         .requestMatchers("/", "/ping").permitAll()
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api-docs/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/schools/**", "/api/companies/**", "/api/offers/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/schools/**", "/api/companies/**", "/api/offers/**", "/api/packs/**").permitAll()
 
                         // Role-based endpoints
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
@@ -51,6 +51,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/offers/**").hasAnyRole("ENTREPRISE", "ECOLE")
                         .requestMatchers(HttpMethod.PUT, "/api/offers/**").hasAnyRole("ENTREPRISE", "ECOLE")
                         .requestMatchers(HttpMethod.DELETE, "/api/offers/**").hasAnyRole("ENTREPRISE", "ECOLE")
+                        .requestMatchers(HttpMethod.POST, "/api/packs/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/packs/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/packs/**").hasRole("ADMIN")
 
                         // Dev/test: delete all users (authenticated only)
                         .requestMatchers(HttpMethod.DELETE, "/api/auth/users").authenticated()
@@ -80,7 +83,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOriginPatterns(List.of("http://localhost:*", "http://127.0.0.1:*"));
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
 

@@ -9,6 +9,7 @@ import com.rezo.entities.User;
 import com.rezo.entities.enums.CompanySize;
 import com.rezo.entities.enums.UserRole;
 import com.rezo.repositories.CompanyRepository;
+import com.rezo.repositories.PackRepository;
 import com.rezo.repositories.ProfileRepository;
 import com.rezo.repositories.SchoolRepository;
 import com.rezo.repositories.UserRepository;
@@ -44,6 +45,7 @@ class UserControllerTest {
     @Mock private ProfileRepository profileRepository;
     @Mock private CompanyRepository companyRepository;
     @Mock private SchoolRepository schoolRepository;
+    @Mock private PackRepository packRepository;
 
     private MockMvc mockMvc;
     private ObjectMapper objectMapper;
@@ -53,7 +55,7 @@ class UserControllerTest {
     @BeforeEach
     void setUp() {
         UserController controller = new UserController(
-                userRepository, profileRepository, companyRepository, schoolRepository);
+                userRepository, profileRepository, companyRepository, schoolRepository, packRepository);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
         objectMapper = new ObjectMapper();
     }
@@ -212,6 +214,47 @@ class UserControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.profil.niveauEtude").value("M1"))
                 .andExpect(jsonPath("$.profil.domaine").value("Data Science"));
+    }
+
+    @Test
+    void updateMyPackShouldChangePackWhenCompatible() throws Exception {
+        User user = buildUser(UserRole.ETUDIANT);
+        Pack premiumPack = new Pack();
+        setField(premiumPack, "id", UUID.fromString("12345678-1234-1234-1234-123456789abc"));
+        premiumPack.setNom("PREMIUM_STUDENT");
+        premiumPack.setCible("ETUDIANT,LYCEEN,EMPLOI");
+        premiumPack.setFeatures("MATCHING_PREMIUM,AI_CHAT_ACCESS,MESSAGERIE_ILLIMITEE");
+
+        when(userRepository.findByIdWithPack(userId)).thenReturn(Optional.of(user));
+        when(packRepository.findById(UUID.fromString("12345678-1234-1234-1234-123456789abc"))).thenReturn(Optional.of(premiumPack));
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        mockMvc.perform(put("/api/users/me/pack")
+                        .principal(principal())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"packId\":\"12345678-1234-1234-1234-123456789abc\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.packNom").value("PREMIUM_STUDENT"));
+    }
+
+    @Test
+    void updateMyPackShouldReturn400WhenPackIsIncompatible() throws Exception {
+        User user = buildUser(UserRole.ETUDIANT);
+        Pack businessPack = new Pack();
+        setField(businessPack, "id", UUID.fromString("abcdefab-cdef-cdef-cdef-abcdefabcdef"));
+        businessPack.setNom("BUSINESS_PLUS");
+        businessPack.setCible("ENTREPRISE,ECOLE");
+        businessPack.setFeatures("OFFERS_PUBLISH,MESSAGERIE_ILLIMITEE");
+
+        when(userRepository.findByIdWithPack(userId)).thenReturn(Optional.of(user));
+        when(packRepository.findById(UUID.fromString("abcdefab-cdef-cdef-cdef-abcdefabcdef"))).thenReturn(Optional.of(businessPack));
+
+        mockMvc.perform(put("/api/users/me/pack")
+                        .principal(principal())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"packId\":\"abcdefab-cdef-cdef-cdef-abcdefabcdef\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Ce pack n'est pas compatible avec votre role"));
     }
 
     // ─── DELETE /api/users/me ────────────────────────────────────────────
