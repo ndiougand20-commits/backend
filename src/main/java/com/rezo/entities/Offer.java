@@ -2,7 +2,9 @@ package com.rezo.entities;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.rezo.entities.enums.OfferType;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -47,6 +49,14 @@ public class Offer {
     @Column(length = 150)
     private String location;
 
+    @ElementCollection
+    @CollectionTable(name = "offer_competences", joinColumns = @JoinColumn(name = "offer_id"))
+    @Column(name = "competence", nullable = false)
+    private Set<String> competencesRequises = new HashSet<>();
+
+    @Column(nullable = false)
+    private LocalDateTime datePublication;
+
     private LocalDateTime dateDebut;
 
     private LocalDateTime dateFin;
@@ -75,6 +85,9 @@ public class Offer {
     void validateOwner() {
         if ((ownerEntreprise == null && ownerEcole == null) || (ownerEntreprise != null && ownerEcole != null)) {
             throw new IllegalStateException("Une offre doit avoir exactement un owner: entreprise OU ecole.");
+        }
+        if (datePublication == null) {
+            datePublication = LocalDateTime.now();
         }
     }
 
@@ -120,6 +133,22 @@ public class Offer {
 
     public void setLocation(String location) {
         this.location = location;
+    }
+
+    public Set<String> getCompetencesRequises() {
+        return competencesRequises;
+    }
+
+    public void setCompetencesRequises(Set<String> competencesRequises) {
+        this.competencesRequises = competencesRequises;
+    }
+
+    public LocalDateTime getDatePublication() {
+        return datePublication;
+    }
+
+    public void setDatePublication(LocalDateTime datePublication) {
+        this.datePublication = datePublication;
     }
 
     public LocalDateTime getDateDebut() {

@@ -36,7 +36,7 @@ public class SecurityConfig {
                         .requestMatchers("/", "/ping").permitAll()
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api-docs/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/schools/**", "/api/companies/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/schools/**", "/api/companies/**", "/api/offers/**").permitAll()
 
                         // Role-based endpoints
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
@@ -48,6 +48,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/schools/**").hasRole("ECOLE")
                         .requestMatchers(HttpMethod.PUT, "/api/schools/**").hasRole("ECOLE")
                         .requestMatchers(HttpMethod.DELETE, "/api/schools/**").hasRole("ECOLE")
+                        .requestMatchers(HttpMethod.POST, "/api/offers/**").hasAnyRole("ENTREPRISE", "ECOLE")
+                        .requestMatchers(HttpMethod.PUT, "/api/offers/**").hasAnyRole("ENTREPRISE", "ECOLE")
+                        .requestMatchers(HttpMethod.DELETE, "/api/offers/**").hasAnyRole("ENTREPRISE", "ECOLE")
 
                         // Dev/test: delete all users (authenticated only)
                         .requestMatchers(HttpMethod.DELETE, "/api/auth/users").authenticated()
