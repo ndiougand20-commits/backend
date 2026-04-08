@@ -12,6 +12,9 @@ import java.util.UUID;
 public interface ProfileRepository extends JpaRepository<Profile, UUID> {
 	Optional<Profile> findByUserId(UUID userId);
 
+	@Query("select p from Profile p join fetch p.user where p.id = :profileId")
+	Optional<Profile> findByIdWithUser(@Param("profileId") UUID profileId);
+
 	@Modifying
 	@Query("delete from Profile p where p.user.id = :userId")
 	int deleteAllByUserId(@Param("userId") UUID userId);
