@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.env.Environment;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -56,6 +57,9 @@ class AuthControllerSignupTest {
     @Mock
     private JwtService jwtService;
 
+    @Mock
+    private Environment environment;
+
     private MockMvc mockMvc;
     private ObjectMapper objectMapper;
 
@@ -67,7 +71,8 @@ class AuthControllerSignupTest {
                 profileRepository,
                 companyRepository,
                 schoolRepository,
-                jwtService
+                jwtService,
+                environment
         );
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
         objectMapper = new ObjectMapper();
@@ -148,6 +153,7 @@ class AuthControllerSignupTest {
     @Test
     void shouldDeleteUserByEmail() throws Exception {
         UUID userId = UUID.randomUUID();
+        when(environment.matchesProfiles("dev")).thenReturn(true);
 
         when(userRepository.findIdByEmail("delete-me@rezo.com")).thenReturn(Optional.of(userId));
         when(userRepository.deleteByIdDirect(userId)).thenReturn(1);
@@ -164,6 +170,7 @@ class AuthControllerSignupTest {
 
     @Test
     void shouldReturnNotFoundWhenDeletingUnknownUser() throws Exception {
+        when(environment.matchesProfiles("dev")).thenReturn(true);
         when(userRepository.findIdByEmail("absent@rezo.com")).thenReturn(Optional.empty());
 
         mockMvc.perform(delete("/api/auth/users/by-email/absent@rezo.com"))

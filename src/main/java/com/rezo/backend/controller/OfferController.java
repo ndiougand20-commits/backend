@@ -3,15 +3,18 @@ package com.rezo.backend.controller;
 import com.rezo.backend.dto.offer.OfferRequest;
 import com.rezo.backend.dto.offer.OfferResponse;
 import com.rezo.backend.service.PackRules;
+import com.rezo.backend.service.UserMediaStorageService;
 import com.rezo.entities.Company;
 import com.rezo.entities.Offer;
 import com.rezo.entities.School;
 import com.rezo.entities.User;
 import com.rezo.entities.enums.OfferType;
+import com.rezo.entities.enums.SwipeAction;
 import com.rezo.entities.enums.UserRole;
 import com.rezo.repositories.CompanyRepository;
 import com.rezo.repositories.OfferRepository;
 import com.rezo.repositories.SchoolRepository;
+import com.rezo.repositories.SwipeRepository;
 import com.rezo.repositories.UserRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -30,10 +33,13 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.security.Principal;
 import java.time.LocalDateTime;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -50,17 +56,23 @@ public class OfferController {
     private final UserRepository userRepository;
     private final CompanyRepository companyRepository;
     private final SchoolRepository schoolRepository;
+    private final SwipeRepository swipeRepository;
+    private final UserMediaStorageService userMediaStorageService;
 
     public OfferController(
             OfferRepository offerRepository,
             UserRepository userRepository,
             CompanyRepository companyRepository,
-            SchoolRepository schoolRepository
+            SchoolRepository schoolRepository,
+            SwipeRepository swipeRepository,
+            UserMediaStorageService userMediaStorageService
     ) {
         this.offerRepository = offerRepository;
         this.userRepository = userRepository;
         this.companyRepository = companyRepository;
         this.schoolRepository = schoolRepository;
+        this.swipeRepository = swipeRepository;
+        this.userMediaStorageService = userMediaStorageService;
     }
 
     @Operation(summary = "Lister les offres", description = "Retourne la liste publique des offres stages/emplois avec leur proprietaire")
@@ -86,6 +98,52 @@ public class OfferController {
                 .<ResponseEntity<?>>map(offer -> ResponseEntity.ok(toResponse(offer)))
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("message", "Offre introuvable")));
+    }
+
+    @Operation(summary = "Utilisateurs ayant aime une offre", description = "Retourne la liste des utilisateurs qui ont swipe LIKE sur cette offre. Accessible uniquement par le proprietaire de l'offre.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Liste retournee"),
+            @ApiResponse(responseCode = "401", description = "Non authentifie"),
+            @ApiResponse(responseCode = "403", description = "Acces refuse"),
+            @ApiResponse(responseCode = "404", description = "Offre introuvable")
+    })
+    @SecurityRequirement(name = "bearer-jwt")
+    @GetMapping("/{id}/liked-by")
+    @Transactional
+    public ResponseEntity<?> getLikedBy(@PathVariable UUID id, Principal principal) {
+        try {
+            User user = resolveAuthenticatedUser(principal);
+            Optional<UUID> optionalOwnerUserId = offerRepository.findOwnerUserIdById(id);
+            if (optionalOwnerUserId.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Offre introuvable"));
+            }
+            if (!optionalOwnerUserId.get().equals(user.getId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(Map.of("message", "Acces reserve au proprietaire de l'offre"));
+            }
+            List<User> likers = swipeRepository.findLikersByOfferId(id, SwipeAction.LIKE);
+            List<Map<String, Object>> result = likers.stream()
+                    .map(liker -> {
+                        Map<String, Object> entry = new LinkedHashMap<>();
+                        entry.put("userId", liker.getId());
+                        entry.put("prenom", liker.getPrenom());
+                        entry.put("nom", liker.getNom());
+                        entry.put("role", liker.getRole() != null ? liker.getRole().name() : null);
+                        entry.put("avatarUrl", liker.getAvatarUrl());
+                        return entry;
+                    })
+                    .toList();
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("offerId", id);
+            body.put("count", result.size());
+            body.put("likers", result);
+            LOGGER.info("liked-by offerId={} ownerId={} count={}", id, user.getId(), result.size());
+            return ResponseEntity.ok(body);
+        } catch (UnauthorizedException exception) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", exception.getMessage()));
+        } catch (ForbiddenException exception) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", exception.getMessage()));
+        }
     }
 
     @Operation(summary = "Publier une offre", description = "Publication d'une offre par un utilisateur legitime ECOLE ou ENTREPRISE")
@@ -193,6 +251,54 @@ public class OfferController {
         }
     }
 
+    @Operation(summary = "Uploader un PDF d'offre", description = "Permet au proprietaire d'une offre de joindre une brochure/fiche PDF")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "PDF d'offre enregistre"),
+            @ApiResponse(responseCode = "400", description = "Fichier invalide"),
+            @ApiResponse(responseCode = "401", description = "Non authentifie"),
+            @ApiResponse(responseCode = "403", description = "Ownership refuse"),
+            @ApiResponse(responseCode = "404", description = "Offre introuvable")
+    })
+    @SecurityRequirement(name = "bearer-jwt")
+    @PostMapping("/{id}/media")
+    @Transactional
+    public ResponseEntity<?> uploadOfferMedia(
+            @PathVariable UUID id,
+            @RequestParam("file") MultipartFile file,
+            Principal principal
+    ) {
+        try {
+            User user = resolveAuthenticatedUser(principal);
+            Optional<Offer> optionalOffer = offerRepository.findByIdWithOwners(id);
+            if (optionalOffer.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Offre introuvable"));
+            }
+
+            Offer offer = optionalOffer.get();
+            if (!resolveOwnerUserId(offer).equals(user.getId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(Map.of("message", "Vous ne pouvez joindre un media qu'a votre propre offre"));
+            }
+            ensurePackAllowsOfferManagement(user);
+
+            UserMediaStorageService.StoredMedia stored = userMediaStorageService.storeOfferPdf(user.getId(), file);
+            offer.setPdfUrl(stored.fileUrl());
+            Offer saved = offerRepository.save(offer);
+
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("offerId", saved.getId());
+            body.put("pdfUrl", saved.getPdfUrl());
+            body.put("message", "PDF d'offre enregistre avec succes");
+            return ResponseEntity.ok(body);
+        } catch (UnauthorizedException exception) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", exception.getMessage()));
+        } catch (ForbiddenException exception) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", exception.getMessage()));
+        } catch (UserMediaStorageService.MediaValidationException exception) {
+            return ResponseEntity.badRequest().body(Map.of("message", exception.getMessage()));
+        }
+    }
+
     private User resolveAuthenticatedUser(Principal principal) {
         if (principal == null || principal.getName() == null || principal.getName().isBlank()) {
             throw new UnauthorizedException("Non authentifie");
@@ -290,6 +396,11 @@ public class OfferController {
             offer.setLocation(value);
         }
 
+        if (creation || request.getPdfUrl() != null) {
+            String value = trim(request.getPdfUrl());
+            offer.setPdfUrl(value == null || value.isBlank() ? null : value);
+        }
+
         if (creation || request.getCompetencesRequises() != null) {
             offer.setCompetencesRequises(normalizeNonEmptySet(request.getCompetencesRequises(), "competencesRequises"));
         }
@@ -339,6 +450,7 @@ public class OfferController {
         response.setType(offer.getType() != null ? offer.getType().name() : null);
         response.setDomaine(offer.getDomaine());
         response.setLocation(offer.getLocation());
+        response.setPdfUrl(offer.getPdfUrl());
         response.setCompetencesRequises(copySet(offer.getCompetencesRequises()));
         response.setDatePublication(offer.getDatePublication());
         response.setDateDebut(offer.getDateDebut());

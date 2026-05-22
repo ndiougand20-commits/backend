@@ -41,4 +41,12 @@ public interface OfferRepository extends JpaRepository<Offer, UUID> {
     @Modifying
     @Query("delete from Offer o where o.id = :offerId")
     int deleteByIdDirect(@Param("offerId") UUID offerId);
+
+        @Query("""
+                        select count(o) from Offer o
+                        left join o.ownerEntreprise oe
+                        left join o.ownerEcole se
+                        where oe.user.id = :ownerUserId or se.user.id = :ownerUserId
+                        """)
+        long countByOwnerUserId(@Param("ownerUserId") UUID ownerUserId);
 }

@@ -2,6 +2,7 @@ package com.rezo.backend.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rezo.backend.dto.offer.OfferRequest;
+import com.rezo.backend.service.UserMediaStorageService;
 import com.rezo.entities.Company;
 import com.rezo.entities.Offer;
 import com.rezo.entities.School;
@@ -14,6 +15,7 @@ import com.rezo.entities.enums.UserRole;
 import com.rezo.repositories.CompanyRepository;
 import com.rezo.repositories.OfferRepository;
 import com.rezo.repositories.SchoolRepository;
+import com.rezo.repositories.SwipeRepository;
 import com.rezo.repositories.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -57,6 +59,12 @@ class OfferControllerTest {
     @Mock
     private SchoolRepository schoolRepository;
 
+    @Mock
+    private SwipeRepository swipeRepository;
+
+    @Mock
+    private UserMediaStorageService userMediaStorageService;
+
     private MockMvc mockMvc;
     private ObjectMapper objectMapper;
 
@@ -68,7 +76,14 @@ class OfferControllerTest {
 
     @BeforeEach
     void setUp() {
-        OfferController controller = new OfferController(offerRepository, userRepository, companyRepository, schoolRepository);
+        OfferController controller = new OfferController(
+                offerRepository,
+                userRepository,
+                companyRepository,
+                schoolRepository,
+                swipeRepository,
+                userMediaStorageService
+        );
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
         objectMapper = new ObjectMapper().findAndRegisterModules();
     }

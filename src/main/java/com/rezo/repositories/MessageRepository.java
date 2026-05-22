@@ -46,4 +46,7 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
     @Modifying
     @Query("delete from Message m where m.id = :messageId and m.sender.id = :senderId")
     int deleteByIdAndSenderId(@Param("messageId") UUID messageId, @Param("senderId") UUID senderId);
+
+        @Query("select count(m) from Message m where m.receiver.id = :receiverId and m.isRead = false")
+        long countUnreadByReceiverId(@Param("receiverId") UUID receiverId);
 }

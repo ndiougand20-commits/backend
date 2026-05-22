@@ -9,9 +9,13 @@ import com.rezo.entities.User;
 import com.rezo.entities.enums.CompanySize;
 import com.rezo.entities.enums.UserRole;
 import com.rezo.repositories.CompanyRepository;
+import com.rezo.repositories.MessageRepository;
+import com.rezo.repositories.OfferRepository;
 import com.rezo.repositories.PackRepository;
+import com.rezo.repositories.ProfileSwipeRepository;
 import com.rezo.repositories.ProfileRepository;
 import com.rezo.repositories.SchoolRepository;
+import com.rezo.repositories.SwipeRepository;
 import com.rezo.repositories.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,6 +50,10 @@ class UserControllerTest {
     @Mock private CompanyRepository companyRepository;
     @Mock private SchoolRepository schoolRepository;
     @Mock private PackRepository packRepository;
+    @Mock private SwipeRepository swipeRepository;
+    @Mock private ProfileSwipeRepository profileSwipeRepository;
+    @Mock private OfferRepository offerRepository;
+    @Mock private MessageRepository messageRepository;
 
     private MockMvc mockMvc;
     private ObjectMapper objectMapper;
@@ -55,7 +63,16 @@ class UserControllerTest {
     @BeforeEach
     void setUp() {
         UserController controller = new UserController(
-                userRepository, profileRepository, companyRepository, schoolRepository, packRepository);
+            userRepository,
+            profileRepository,
+            companyRepository,
+            schoolRepository,
+            packRepository,
+            swipeRepository,
+            profileSwipeRepository,
+            offerRepository,
+            messageRepository
+        );
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
         objectMapper = new ObjectMapper();
     }

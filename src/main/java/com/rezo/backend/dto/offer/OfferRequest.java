@@ -15,6 +15,8 @@ public class OfferRequest {
     @JsonAlias({"localisation"})
     private String location;
 
+    private String pdfUrl;
+
     @JsonAlias({"competences"})
     private List<String> competencesRequises;
 
@@ -60,6 +62,14 @@ public class OfferRequest {
 
     public void setLocation(String location) {
         this.location = location;
+    }
+
+    public String getPdfUrl() {
+        return pdfUrl;
+    }
+
+    public void setPdfUrl(String pdfUrl) {
+        this.pdfUrl = pdfUrl;
     }
 
     public List<String> getCompetencesRequises() {

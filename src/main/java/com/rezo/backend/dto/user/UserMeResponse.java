@@ -21,6 +21,7 @@ public class UserMeResponse {
     private Boolean canManageOffers;
     private Boolean canUseMessaging;
     private Boolean canUseAiChat;
+    private Long matchCount;
     private LocalDateTime createdAt;
     private Map<String, Object> profil;
 
@@ -65,6 +66,9 @@ public class UserMeResponse {
 
     public Boolean getCanUseAiChat() { return canUseAiChat; }
     public void setCanUseAiChat(Boolean canUseAiChat) { this.canUseAiChat = canUseAiChat; }
+
+    public Long getMatchCount() { return matchCount; }
+    public void setMatchCount(Long matchCount) { this.matchCount = matchCount; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

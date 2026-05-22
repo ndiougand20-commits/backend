@@ -49,6 +49,9 @@ public class Offer {
     @Column(length = 150)
     private String location;
 
+    @Column(length = 500)
+    private String pdfUrl;
+
     @ElementCollection
     @CollectionTable(name = "offer_competences", joinColumns = @JoinColumn(name = "offer_id"))
     @Column(name = "competence", nullable = false)
@@ -133,6 +136,14 @@ public class Offer {
 
     public void setLocation(String location) {
         this.location = location;
+    }
+
+    public String getPdfUrl() {
+        return pdfUrl;
+    }
+
+    public void setPdfUrl(String pdfUrl) {
+        this.pdfUrl = pdfUrl;
     }
 
     public Set<String> getCompetencesRequises() {

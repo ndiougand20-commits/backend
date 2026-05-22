@@ -12,6 +12,7 @@ public class OfferResponse {
     private String type;
     private String domaine;
     private String location;
+    private String pdfUrl;
     private Set<String> competencesRequises;
     private LocalDateTime datePublication;
     private LocalDateTime dateDebut;
@@ -69,6 +70,14 @@ public class OfferResponse {
 
     public void setLocation(String location) {
         this.location = location;
+    }
+
+    public String getPdfUrl() {
+        return pdfUrl;
+    }
+
+    public void setPdfUrl(String pdfUrl) {
+        this.pdfUrl = pdfUrl;
     }
 
     public Set<String> getCompetencesRequises() {

@@ -88,12 +88,25 @@ public class FeatureAccessController {
     public ResponseEntity<?> accessSummary(Principal principal) {
         try {
             User user = resolveAuthenticatedUser(principal);
+            boolean messagingAllowed = PackRules.canUseMessaging(user);
+            boolean aiAllowed = PackRules.canUseAiChat(user);
+            String packNom = packName(user);
             return ResponseEntity.ok(Map.of(
-                    "packNom", packName(user),
+                "packNom", packNom,
                     "canViewOpportunities", PackRules.canViewOpportunities(user),
                     "canManageOffers", PackRules.canManageOffers(user),
-                    "canUseMessaging", PackRules.canUseMessaging(user),
-                    "canUseAiChat", PackRules.canUseAiChat(user)
+                "canUseMessaging", messagingAllowed,
+                "canUseAiChat", aiAllowed,
+                "messaging", Map.of(
+                    "allowed", messagingAllowed,
+                    "reason", messagingAllowed ? "Acces autorise" : "Pack insuffisant",
+                    "requiredPack", messagingAllowed ? "" : "Pack avec messagerie"
+                ),
+                "chat-ai", Map.of(
+                    "allowed", aiAllowed,
+                    "reason", aiAllowed ? "Acces autorise" : "Pack insuffisant",
+                    "requiredPack", aiAllowed ? "" : "Pack avec AI_CHAT_ACCESS"
+                )
             ));
         } catch (UnauthorizedException exception) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", exception.getMessage()));

@@ -4,6 +4,7 @@ import com.rezo.backend.dto.user.UserMediaFileResponse;
 import com.rezo.backend.service.UserMediaStorageService;
 import com.rezo.entities.User;
 import com.rezo.entities.UserMediaFile;
+import com.rezo.entities.enums.UserRole;
 import com.rezo.repositories.UserMediaFileRepository;
 import com.rezo.repositories.UserRepository;
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,6 +29,7 @@ import java.security.Principal;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
@@ -36,6 +38,17 @@ import java.util.UUID;
 public class UserMediaController {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(UserMediaController.class);
+    private static final String LEGACY_DEFAULT_JUSTIFICATIF = "JUSTIFICATIF_PDF";
+    private static final Set<String> VALID_PDF_CATEGORIES = Set.of(
+            LEGACY_DEFAULT_JUSTIFICATIF,
+            "CV",
+            "LM",
+            "DIPLOME",
+            "BULLETIN",
+            "JUSTIFICATIF_RECONN",
+            "JUSTIFICATIF_ENTREPRISE",
+            "OFFER_BROCHURE"
+    );
 
     private final UserRepository userRepository;
     private final UserMediaFileRepository userMediaFileRepository;
@@ -59,7 +72,8 @@ public class UserMediaController {
     @GetMapping
     public ResponseEntity<?> listMyMedia(@RequestParam(required = false) String category, Principal principal) {
         try {
-            UUID userId = resolveAuthenticatedUserId(principal);
+            User user = resolveAuthenticatedUser(principal);
+            UUID userId = user.getId();
             List<UserMediaFile> files;
             if (category == null || category.isBlank()) {
                 files = userMediaFileRepository.findByUserIdOrderByCreatedAtDesc(userId);
@@ -82,7 +96,7 @@ public class UserMediaController {
     @PostMapping("/photos")
     @Transactional
     public ResponseEntity<?> uploadPhoto(@RequestParam("file") MultipartFile file, Principal principal) {
-        return upload(file, principal, UploadKind.PHOTO);
+        return upload(file, principal, UploadKind.PHOTO, null);
     }
 
     @Operation(summary = "Uploader un justificatif PDF", description = "Accepte uniquement des fichiers PDF")
@@ -93,8 +107,12 @@ public class UserMediaController {
     })
     @PostMapping("/justificatifs")
     @Transactional
-    public ResponseEntity<?> uploadJustificatif(@RequestParam("file") MultipartFile file, Principal principal) {
-        return upload(file, principal, UploadKind.JUSTIFICATIF);
+    public ResponseEntity<?> uploadJustificatif(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(name = "category", required = false) String category,
+            Principal principal
+    ) {
+        return upload(file, principal, UploadKind.JUSTIFICATIF, category);
     }
 
     @Operation(summary = "Supprimer un media", description = "Supprime un fichier media appartenant a l'utilisateur connecte")
@@ -107,7 +125,8 @@ public class UserMediaController {
     @Transactional
     public ResponseEntity<?> deleteMedia(@PathVariable UUID id, Principal principal) {
         try {
-            UUID userId = resolveAuthenticatedUserId(principal);
+            User user = resolveAuthenticatedUser(principal);
+            UUID userId = user.getId();
             int deleted = userMediaFileRepository.deleteByIdAndUserId(id, userId);
             if (deleted == 0) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Media introuvable"));
@@ -118,12 +137,20 @@ public class UserMediaController {
         }
     }
 
-    private ResponseEntity<?> upload(MultipartFile file, Principal principal, UploadKind kind) {
+    private ResponseEntity<?> upload(MultipartFile file, Principal principal, UploadKind kind, String requestedCategory) {
         try {
-            UUID userId = resolveAuthenticatedUserId(principal);
+            User user = resolveAuthenticatedUser(principal);
+            UUID userId = user.getId();
+
+            String category = null;
+            if (kind == UploadKind.JUSTIFICATIF) {
+                category = normalizeJustificatifCategory(requestedCategory);
+                ensureCategoryAllowedForRole(user, category);
+            }
+
             UserMediaStorageService.StoredMedia stored = kind == UploadKind.PHOTO
                     ? userMediaStorageService.storePhoto(userId, file)
-                    : userMediaStorageService.storeJustificatifPdf(userId, file);
+                    : userMediaStorageService.storeJustificatifPdf(userId, file, category);
 
             UserMediaFile entity = new UserMediaFile();
             entity.setUserId(userId);
@@ -137,6 +164,8 @@ public class UserMediaController {
             return ResponseEntity.status(HttpStatus.CREATED).body(UserMediaFileResponse.from(entity));
         } catch (UnauthorizedException exception) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", exception.getMessage()));
+        } catch (ForbiddenException exception) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", exception.getMessage()));
         } catch (UserMediaStorageService.MediaValidationException exception) {
             return ResponseEntity.badRequest().body(Map.of("message", exception.getMessage()));
         } catch (UserMediaStorageService.MediaStorageException exception) {
@@ -145,14 +174,45 @@ public class UserMediaController {
         }
     }
 
-    private UUID resolveAuthenticatedUserId(Principal principal) {
+    private User resolveAuthenticatedUser(Principal principal) {
         if (principal == null || principal.getName() == null || principal.getName().isBlank()) {
             throw new UnauthorizedException("Non authentifie");
         }
         UUID userId = UUID.fromString(principal.getName());
-        User user = userRepository.findById(userId)
+        return userRepository.findById(userId)
                 .orElseThrow(() -> new UnauthorizedException("Utilisateur authentifie introuvable"));
-        return user.getId();
+    }
+
+    private String normalizeJustificatifCategory(String requestedCategory) {
+        String normalized = (requestedCategory == null || requestedCategory.isBlank())
+                ? LEGACY_DEFAULT_JUSTIFICATIF
+                : requestedCategory.trim().toUpperCase(Locale.ROOT);
+        if (!VALID_PDF_CATEGORIES.contains(normalized)) {
+            throw new UserMediaStorageService.MediaValidationException("Categorie de justificatif invalide");
+        }
+        return normalized;
+    }
+
+    private void ensureCategoryAllowedForRole(User user, String category) {
+        if (user == null || user.getRole() == null || category == null) {
+            throw new ForbiddenException("Categorie non autorisee pour ce profil");
+        }
+
+        if (user.getRole() == UserRole.ADMIN) {
+            return;
+        }
+
+        Set<String> allowedCategories = switch (user.getRole()) {
+            case ETUDIANT -> Set.of(LEGACY_DEFAULT_JUSTIFICATIF, "CV", "LM", "DIPLOME");
+            case LYCEEN -> Set.of(LEGACY_DEFAULT_JUSTIFICATIF, "BULLETIN", "JUSTIFICATIF_RECONN");
+            case ECOLE -> Set.of(LEGACY_DEFAULT_JUSTIFICATIF, "JUSTIFICATIF_RECONN", "OFFER_BROCHURE");
+            case ENTREPRISE -> Set.of(LEGACY_DEFAULT_JUSTIFICATIF, "JUSTIFICATIF_ENTREPRISE", "OFFER_BROCHURE");
+            default -> Set.of();
+        };
+
+        if (!allowedCategories.contains(category)) {
+            throw new ForbiddenException("Categorie non autorisee pour ce role");
+        }
     }
 
     private enum UploadKind {
@@ -162,6 +222,12 @@ public class UserMediaController {
 
     private static class UnauthorizedException extends RuntimeException {
         private UnauthorizedException(String message) {
+            super(message);
+        }
+    }
+
+    private static class ForbiddenException extends RuntimeException {
+        private ForbiddenException(String message) {
             super(message);
         }
     }

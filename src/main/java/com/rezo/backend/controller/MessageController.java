@@ -7,9 +7,13 @@ import com.rezo.entities.Message;
 import com.rezo.entities.Offer;
 import com.rezo.entities.Profile;
 import com.rezo.entities.User;
+import com.rezo.entities.enums.SwipeAction;
+import com.rezo.entities.enums.UserRole;
 import com.rezo.repositories.MessageRepository;
 import com.rezo.repositories.OfferRepository;
+import com.rezo.repositories.ProfileSwipeRepository;
 import com.rezo.repositories.ProfileRepository;
+import com.rezo.repositories.SwipeRepository;
 import com.rezo.repositories.UserRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -54,17 +58,23 @@ public class MessageController {
     private final UserRepository userRepository;
     private final OfferRepository offerRepository;
     private final ProfileRepository profileRepository;
+    private final SwipeRepository swipeRepository;
+    private final ProfileSwipeRepository profileSwipeRepository;
 
     public MessageController(
             MessageRepository messageRepository,
             UserRepository userRepository,
             OfferRepository offerRepository,
-            ProfileRepository profileRepository
+            ProfileRepository profileRepository,
+            SwipeRepository swipeRepository,
+            ProfileSwipeRepository profileSwipeRepository
     ) {
         this.messageRepository = messageRepository;
         this.userRepository = userRepository;
         this.offerRepository = offerRepository;
         this.profileRepository = profileRepository;
+        this.swipeRepository = swipeRepository;
+        this.profileSwipeRepository = profileSwipeRepository;
     }
 
     @Operation(
@@ -108,6 +118,9 @@ public class MessageController {
             }
             if (!PackRules.canUseMessaging(receiver)) {
                 throw new ForbiddenException("Le destinataire n'est pas joignable via la messagerie");
+            }
+            if (!isMutualMatch(sender, receiver)) {
+                throw new ForbiddenException("La messagerie est reservee aux profils ayant un match mutuel");
             }
 
             String normalizedContent = normalizeContent(request.getContent());
@@ -327,6 +340,35 @@ public class MessageController {
         if (!PackRules.canUseMessaging(user)) {
             throw new ForbiddenException("Votre pack actuel ne permet pas d'utiliser la messagerie");
         }
+    }
+
+    private boolean isMutualMatch(User sender, User receiver) {
+        if (sender == null || receiver == null || sender.getRole() == null || receiver.getRole() == null) {
+            return false;
+        }
+        if (sender.getRole() == UserRole.ADMIN || receiver.getRole() == UserRole.ADMIN) {
+            return true;
+        }
+
+        if (isCandidateRole(sender.getRole()) && isRecruiterRole(receiver.getRole())) {
+            return swipeRepository.existsCandidateLikeOnOwnerOffers(sender.getId(), receiver.getId(), SwipeAction.LIKE)
+                    && profileSwipeRepository.existsBySwiperIdAndTargetUserIdAndAction(receiver.getId(), sender.getId(), SwipeAction.LIKE);
+        }
+
+        if (isRecruiterRole(sender.getRole()) && isCandidateRole(receiver.getRole())) {
+            return swipeRepository.existsCandidateLikeOnOwnerOffers(receiver.getId(), sender.getId(), SwipeAction.LIKE)
+                    && profileSwipeRepository.existsBySwiperIdAndTargetUserIdAndAction(sender.getId(), receiver.getId(), SwipeAction.LIKE);
+        }
+
+        return false;
+    }
+
+    private boolean isCandidateRole(UserRole role) {
+        return role == UserRole.ETUDIANT || role == UserRole.LYCEEN;
+    }
+
+    private boolean isRecruiterRole(UserRole role) {
+        return role == UserRole.ECOLE || role == UserRole.ENTREPRISE;
     }
 
     private Offer resolveOffer(UUID relatedOfferId) {

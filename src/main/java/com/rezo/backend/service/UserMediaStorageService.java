@@ -45,6 +45,10 @@ public class UserMediaStorageService {
     }
 
     public StoredMedia storeJustificatifPdf(UUID userId, MultipartFile file) {
+        return storeJustificatifPdf(userId, file, "JUSTIFICATIF_PDF");
+    }
+
+    public StoredMedia storeJustificatifPdf(UUID userId, MultipartFile file, String category) {
         validateNotEmpty(file);
         validateSize(file, MAX_PDF_BYTES, "Le PDF depasse la taille maximale autorisee (12MB)");
 
@@ -56,7 +60,25 @@ public class UserMediaStorageService {
             throw new MediaValidationException("Seuls les fichiers PDF sont autorises pour les justificatifs");
         }
 
-        return writeFile(userId, "justificatifs", file, "pdf", "JUSTIFICATIF_PDF");
+        String normalizedCategory = category == null || category.isBlank()
+                ? "JUSTIFICATIF_PDF"
+                : category.trim().toUpperCase(Locale.ROOT);
+        return writeFile(userId, "justificatifs", file, "pdf", normalizedCategory);
+    }
+
+    public StoredMedia storeOfferPdf(UUID userId, MultipartFile file) {
+        validateNotEmpty(file);
+        validateSize(file, MAX_PDF_BYTES, "Le PDF depasse la taille maximale autorisee (12MB)");
+
+        String contentType = normalizedContentType(file);
+        String extension = extensionFromFilename(file.getOriginalFilename());
+        boolean pdfMime = "application/pdf".equals(contentType);
+        boolean pdfExt = "pdf".equalsIgnoreCase(extension);
+        if (!pdfMime && !pdfExt) {
+            throw new MediaValidationException("Seuls les fichiers PDF sont autorises pour les offres");
+        }
+
+        return writeFile(userId, "offers", file, "pdf", "OFFER_BROCHURE");
     }
 
     private StoredMedia writeFile(UUID userId, String folder, MultipartFile file, String extension, String category) {

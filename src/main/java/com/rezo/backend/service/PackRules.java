@@ -108,7 +108,7 @@ public final class PackRules {
     }
 
     private static boolean isCandidateRole(UserRole role) {
-        return role == UserRole.ETUDIANT || role == UserRole.LYCEEN || role == UserRole.EMPLOI;
+        return role == UserRole.ETUDIANT || role == UserRole.LYCEEN;
     }
 
     private static String normalize(String value) {

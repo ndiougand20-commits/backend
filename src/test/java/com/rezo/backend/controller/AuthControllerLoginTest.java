@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.env.Environment;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
@@ -50,6 +51,9 @@ class AuthControllerLoginTest {
     @Mock
     private JwtService jwtService;
 
+    @Mock
+    private Environment environment;
+
     private MockMvc mockMvc;
     private ObjectMapper objectMapper;
 
@@ -75,7 +79,8 @@ class AuthControllerLoginTest {
                 profileRepository,
                 companyRepository,
                 schoolRepository,
-                jwtService
+                jwtService,
+                environment
         );
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
         objectMapper = new ObjectMapper();

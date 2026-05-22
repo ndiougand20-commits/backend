@@ -23,6 +23,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -76,7 +77,7 @@ class UserMediaControllerTest {
     @Test
     void uploadPdfShouldReturn400WhenInvalid() throws Exception {
         when(userRepository.findById(userId)).thenReturn(Optional.of(buildUser()));
-        when(userMediaStorageService.storeJustificatifPdf(any(UUID.class), any()))
+        when(userMediaStorageService.storeJustificatifPdf(any(UUID.class), any(), anyString()))
                 .thenThrow(new UserMediaStorageService.MediaValidationException("Seuls les fichiers PDF sont autorises pour les justificatifs"));
 
         MockMultipartFile multipartFile = new MockMultipartFile("file", "doc.txt", "text/plain", "bad".getBytes());

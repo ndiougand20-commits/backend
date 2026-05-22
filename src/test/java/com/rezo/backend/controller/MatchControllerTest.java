@@ -11,9 +11,11 @@ import com.rezo.entities.enums.UserRole;
 import com.rezo.repositories.CompanyRepository;
 import com.rezo.repositories.OfferRepository;
 import com.rezo.repositories.PackRepository;
+import com.rezo.repositories.ProfileSwipeRepository;
 import com.rezo.repositories.ProfileRepository;
 import com.rezo.repositories.SchoolRepository;
 import com.rezo.repositories.SwipeRepository;
+import com.rezo.repositories.UserMediaFileRepository;
 import com.rezo.repositories.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,6 +48,8 @@ class MatchControllerTest {
     @Mock private PackRepository packRepository;
     @Mock private CompanyRepository companyRepository;
     @Mock private SchoolRepository schoolRepository;
+    @Mock private ProfileSwipeRepository profileSwipeRepository;
+    @Mock private UserMediaFileRepository userMediaFileRepository;
 
     private MockMvc mockMvc;
 
@@ -63,7 +67,9 @@ class MatchControllerTest {
                 swipeRepository,
                 packRepository,
                 companyRepository,
-                schoolRepository
+                schoolRepository,
+                profileSwipeRepository,
+                userMediaFileRepository
         );
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }

@@ -8,7 +8,9 @@ import com.rezo.entities.User;
 import com.rezo.entities.enums.UserRole;
 import com.rezo.repositories.MessageRepository;
 import com.rezo.repositories.OfferRepository;
+import com.rezo.repositories.ProfileSwipeRepository;
 import com.rezo.repositories.ProfileRepository;
+import com.rezo.repositories.SwipeRepository;
 import com.rezo.repositories.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,6 +45,8 @@ class MessageControllerTest {
     @Mock private UserRepository userRepository;
     @Mock private OfferRepository offerRepository;
     @Mock private ProfileRepository profileRepository;
+    @Mock private SwipeRepository swipeRepository;
+    @Mock private ProfileSwipeRepository profileSwipeRepository;
 
     private MockMvc mockMvc;
     private ObjectMapper objectMapper;
@@ -54,7 +58,14 @@ class MessageControllerTest {
 
     @BeforeEach
     void setUp() {
-        MessageController controller = new MessageController(messageRepository, userRepository, offerRepository, profileRepository);
+        MessageController controller = new MessageController(
+                messageRepository,
+                userRepository,
+                offerRepository,
+                profileRepository,
+                swipeRepository,
+                profileSwipeRepository
+        );
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
         objectMapper = new ObjectMapper().findAndRegisterModules();
     }
@@ -69,6 +80,8 @@ class MessageControllerTest {
         when(userRepository.findByIdWithPack(senderId)).thenReturn(Optional.of(sender));
         when(userRepository.findByIdWithPack(receiverId)).thenReturn(Optional.of(receiver));
         when(offerRepository.findById(offerId)).thenReturn(Optional.of(offer));
+        when(swipeRepository.existsCandidateLikeOnOwnerOffers(senderId, receiverId, com.rezo.entities.enums.SwipeAction.LIKE)).thenReturn(true);
+        when(profileSwipeRepository.existsBySwiperIdAndTargetUserIdAndAction(receiverId, senderId, com.rezo.entities.enums.SwipeAction.LIKE)).thenReturn(true);
         when(messageRepository.save(any(Message.class))).thenAnswer(invocation -> {
             Message message = invocation.getArgument(0);
             setField(message, "id", messageId);

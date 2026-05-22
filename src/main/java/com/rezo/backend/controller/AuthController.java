@@ -24,6 +24,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.transaction.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.env.Environment;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -57,6 +58,7 @@ public class AuthController {
     private final SchoolRepository schoolRepository;
     private final BCryptPasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final Environment environment;
 
     public AuthController(
             UserRepository userRepository,
@@ -64,7 +66,8 @@ public class AuthController {
             ProfileRepository profileRepository,
             CompanyRepository companyRepository,
             SchoolRepository schoolRepository,
-            JwtService jwtService
+            JwtService jwtService,
+            Environment environment
     ) {
         this.userRepository = userRepository;
         this.packRepository = packRepository;
@@ -73,6 +76,7 @@ public class AuthController {
         this.schoolRepository = schoolRepository;
         this.passwordEncoder = new BCryptPasswordEncoder();
         this.jwtService = jwtService;
+        this.environment = environment;
     }
 
     @Operation(summary = "Inscription multi-profils", description = "Cree un compte User et le profil associe selon le role")
@@ -149,9 +153,14 @@ public class AuthController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Tous les utilisateurs ont ete supprimes")
     })
+    @org.springframework.context.annotation.Profile("dev")
     @DeleteMapping("/users")
     @Transactional
     public ResponseEntity<?> deleteAllUsers() {
+        if (!isDevProfileActive()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Endpoint disponible uniquement en environnement dev"));
+        }
         try {
             profileRepository.deleteAll();
             companyRepository.deleteAll();
@@ -173,9 +182,14 @@ public class AuthController {
             @ApiResponse(responseCode = "404", description = "Utilisateur introuvable"),
             @ApiResponse(responseCode = "409", description = "Suppression impossible a cause de dependances")
     })
+    @org.springframework.context.annotation.Profile("dev")
     @DeleteMapping("/users/by-email/{email}")
     @Transactional
     public ResponseEntity<?> deleteUserByEmail(@PathVariable("email") String email) {
+        if (!isDevProfileActive()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Endpoint disponible uniquement en environnement dev"));
+        }
         String normalizedEmail = email == null ? null : email.trim().toLowerCase(Locale.ROOT);
         if (isBlank(normalizedEmail)) {
             return ResponseEntity.badRequest().body(Map.of("message", "Le parametre email est obligatoire"));
@@ -234,7 +248,7 @@ public class AuthController {
 
     private void validateRoleSpecificPayload(UserRole role, Map<String, Object> profil) {
         switch (role) {
-            case ETUDIANT, EMPLOI -> {
+            case ETUDIANT -> {
                 requiredString(profil, "niveauEtude", "niveau_etude");
                 requiredString(profil, "domaine");
             }
@@ -264,7 +278,7 @@ public class AuthController {
 
     private String createAndLinkComplementaryProfile(UserRole role, Map<String, Object> profil, User user) {
         return switch (role) {
-            case ETUDIANT, EMPLOI -> {
+            case ETUDIANT -> {
                 Profile profile = new Profile();
                 profile.setUser(user);
                 profile.setNiveauEtude(requiredString(profil, "niveauEtude", "niveau_etude"));
@@ -366,6 +380,10 @@ public class AuthController {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private boolean isDevProfileActive() {
+        return environment != null && environment.matchesProfiles("dev");
     }
 
     private static class BadRequestException extends RuntimeException {

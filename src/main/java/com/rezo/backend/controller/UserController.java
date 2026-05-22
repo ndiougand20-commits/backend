@@ -6,16 +6,23 @@ import com.rezo.backend.dto.user.UserPackUpdateRequest;
 import com.rezo.backend.service.PackRules;
 import com.rezo.entities.Company;
 import com.rezo.entities.Pack;
+import com.rezo.entities.ProfileSwipe;
 import com.rezo.entities.Profile;
 import com.rezo.entities.School;
+import com.rezo.entities.Swipe;
 import com.rezo.entities.User;
+import com.rezo.entities.enums.SwipeAction;
 import com.rezo.entities.enums.CompanySize;
 import com.rezo.entities.enums.SchoolStatus;
 import com.rezo.entities.enums.UserRole;
 import com.rezo.repositories.CompanyRepository;
+import com.rezo.repositories.MessageRepository;
+import com.rezo.repositories.OfferRepository;
 import com.rezo.repositories.PackRepository;
+import com.rezo.repositories.ProfileSwipeRepository;
 import com.rezo.repositories.ProfileRepository;
 import com.rezo.repositories.SchoolRepository;
+import com.rezo.repositories.SwipeRepository;
 import com.rezo.repositories.UserRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -56,17 +63,29 @@ public class UserController {
     private final CompanyRepository companyRepository;
     private final SchoolRepository schoolRepository;
     private final PackRepository packRepository;
+    private final SwipeRepository swipeRepository;
+    private final ProfileSwipeRepository profileSwipeRepository;
+    private final OfferRepository offerRepository;
+    private final MessageRepository messageRepository;
 
     public UserController(UserRepository userRepository,
                           ProfileRepository profileRepository,
                           CompanyRepository companyRepository,
                           SchoolRepository schoolRepository,
-                          PackRepository packRepository) {
+                          PackRepository packRepository,
+                          SwipeRepository swipeRepository,
+                          ProfileSwipeRepository profileSwipeRepository,
+                          OfferRepository offerRepository,
+                          MessageRepository messageRepository) {
         this.userRepository = userRepository;
         this.profileRepository = profileRepository;
         this.companyRepository = companyRepository;
         this.schoolRepository = schoolRepository;
         this.packRepository = packRepository;
+        this.swipeRepository = swipeRepository;
+        this.profileSwipeRepository = profileSwipeRepository;
+        this.offerRepository = offerRepository;
+        this.messageRepository = messageRepository;
     }
 
     // ─── GET /api/users/me ───────────────────────────────────────────────
@@ -88,6 +107,25 @@ public class UserController {
         }
         User user = optUser.get();
         return ResponseEntity.ok(toMeResponse(user));
+    }
+
+    @Operation(summary = "Mes statistiques", description = "Retourne les stats principales du dashboard")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Stats retournees"),
+            @ApiResponse(responseCode = "401", description = "Non authentifie"),
+            @ApiResponse(responseCode = "404", description = "Utilisateur introuvable")
+    })
+    @GetMapping("/me/stats")
+    @Transactional
+    public ResponseEntity<?> getMyStats(Principal principal) {
+        UUID userId = extractUserId(principal);
+        Optional<User> optUser = userRepository.findByIdWithPack(userId);
+        if (optUser.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "Utilisateur introuvable"));
+        }
+        User user = optUser.get();
+        return ResponseEntity.ok(buildStatsResponse(user));
     }
 
     // ─── PUT /api/users/me ───────────────────────────────────────────────
@@ -247,9 +285,83 @@ public class UserController {
         dto.setCanManageOffers(PackRules.canManageOffers(user));
         dto.setCanUseMessaging(PackRules.canUseMessaging(user));
         dto.setCanUseAiChat(PackRules.canUseAiChat(user));
+        dto.setMatchCount(calculateMatchCount(user));
         dto.setCreatedAt(user.getCreatedAt());
         dto.setProfil(buildProfilMap(user));
         return dto;
+    }
+
+    private long calculateMatchCount(User user) {
+        if (user == null || user.getId() == null || user.getRole() == null) {
+            return 0;
+        }
+
+        Set<UUID> matchedUserIds = new HashSet<>();
+
+        if (user.getRole() == UserRole.ETUDIANT || user.getRole() == UserRole.LYCEEN) {
+            List<Swipe> likes = swipeRepository.findByUserIdAndActionWithOffer(user.getId(), SwipeAction.LIKE);
+            for (Swipe like : likes) {
+                if (like.getOffer() == null || like.getOffer().getId() == null) {
+                    continue;
+                }
+                UUID ownerUserId = offerRepository.findOwnerUserIdById(like.getOffer().getId()).orElse(null);
+                if (ownerUserId == null) {
+                    continue;
+                }
+                boolean recruiterLikedBack = profileSwipeRepository.existsBySwiperIdAndTargetUserIdAndAction(
+                        ownerUserId,
+                        user.getId(),
+                        SwipeAction.LIKE
+                );
+                if (recruiterLikedBack) {
+                    matchedUserIds.add(ownerUserId);
+                }
+            }
+        } else if (user.getRole() == UserRole.ECOLE || user.getRole() == UserRole.ENTREPRISE) {
+            List<ProfileSwipe> profileLikes = profileSwipeRepository.findBySwiperIdAndAction(user.getId(), SwipeAction.LIKE);
+            for (ProfileSwipe profileLike : profileLikes) {
+                if (profileLike.getTargetUser() == null || profileLike.getTargetUser().getId() == null) {
+                    continue;
+                }
+                UUID candidateId = profileLike.getTargetUser().getId();
+                boolean candidateLikedOffer = swipeRepository.existsCandidateLikeOnOwnerOffers(
+                        candidateId,
+                        user.getId(),
+                        SwipeAction.LIKE
+                );
+                if (candidateLikedOffer) {
+                    matchedUserIds.add(candidateId);
+                }
+            }
+        }
+
+        return matchedUserIds.size();
+    }
+
+    private Map<String, Object> buildStatsResponse(User user) {
+        long matchCount = calculateMatchCount(user);
+        long likesSent = isRecruiterRole(user.getRole())
+                ? profileSwipeRepository.countBySwiperIdAndAction(user.getId(), SwipeAction.LIKE)
+                : swipeRepository.countByUserIdAndAction(user.getId(), SwipeAction.LIKE);
+        long likesReceived = isRecruiterRole(user.getRole())
+                ? swipeRepository.countLikesOnOwnerOffers(user.getId(), SwipeAction.LIKE)
+                : profileSwipeRepository.countByTargetUserIdAndAction(user.getId(), SwipeAction.LIKE);
+        long offerCount = isRecruiterRole(user.getRole())
+                ? offerRepository.countByOwnerUserId(user.getId())
+                : 0L;
+        long unreadMessages = messageRepository.countUnreadByReceiverId(user.getId());
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("matchCount", matchCount);
+        body.put("likesSent", likesSent);
+        body.put("likesReceived", likesReceived);
+        body.put("offerCount", offerCount);
+        body.put("unreadMessages", unreadMessages);
+        return body;
+    }
+
+    private boolean isRecruiterRole(UserRole role) {
+        return role == UserRole.ECOLE || role == UserRole.ENTREPRISE;
     }
 
     private Map<String, Object> buildProfilMap(User user) {
@@ -257,7 +369,7 @@ public class UserController {
         Map<String, Object> map = new LinkedHashMap<>();
 
         switch (role) {
-            case ETUDIANT, EMPLOI, LYCEEN -> {
+            case ETUDIANT, LYCEEN -> {
                 Optional<Profile> opt = profileRepository.findByUserId(user.getId());
                 if (opt.isPresent()) {
                     Profile p = opt.get();
@@ -311,7 +423,7 @@ public class UserController {
 
     private void updateRoleProfile(User user, Map<String, Object> data) {
         switch (user.getRole()) {
-            case ETUDIANT, EMPLOI -> updateEtudiantProfile(user, data);
+            case ETUDIANT -> updateEtudiantProfile(user, data);
             case LYCEEN -> updateLyceenProfile(user, data);
             case ENTREPRISE -> updateCompanyProfile(user, data);
             case ECOLE -> updateSchoolProfile(user, data);
