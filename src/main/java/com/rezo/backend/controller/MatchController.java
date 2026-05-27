@@ -403,7 +403,7 @@ public class MatchController {
                 });
             }
 
-            List<User> users = userRepository.findAll();
+            List<User> users = userRepository.findByRoleIn(List.of(UserRole.ETUDIANT, UserRole.LYCEEN));
             List<Map<String, Object>> recommendations = new ArrayList<>();
             int evaluatedCount = 0;
 
@@ -610,8 +610,7 @@ public class MatchController {
 
                     Map<String, Object> item = new LinkedHashMap<>();
                     item.put("matchedUserId", recruiter.get().getId());
-                    item.put("matchedUserName", ((recruiter.get().getPrenom() != null ? recruiter.get().getPrenom() : "") + " "
-                            + (recruiter.get().getNom() != null ? recruiter.get().getNom() : "")).trim());
+                        item.put("matchedUserName", resolveDisplayName(recruiter.get()));
                     item.put("avatarUrl", recruiter.get().getAvatarUrl());
                     item.put("offerTitle", offer.getTitre());
                     item.put("matchedAt", like.getCreatedAt());
@@ -642,8 +641,7 @@ public class MatchController {
 
                     Map<String, Object> item = new LinkedHashMap<>();
                     item.put("matchedUserId", candidate.getId());
-                    item.put("matchedUserName", ((candidate.getPrenom() != null ? candidate.getPrenom() : "") + " "
-                            + (candidate.getNom() != null ? candidate.getNom() : "")).trim());
+                        item.put("matchedUserName", resolveDisplayName(candidate));
                     item.put("avatarUrl", candidate.getAvatarUrl());
                     item.put("offerTitle", offerTitle);
                     item.put("matchedAt", profileLike.getCreatedAt());
@@ -667,6 +665,36 @@ public class MatchController {
         UUID userId = UUID.fromString(principal.getName());
         return userRepository.findByIdWithPack(userId)
                 .orElseThrow(() -> new UnauthorizedException("Utilisateur authentifie introuvable"));
+    }
+
+    private String resolveDisplayName(User user) {
+        String fullName = ((user.getPrenom() != null ? user.getPrenom() : "") + " "
+                + (user.getNom() != null ? user.getNom() : "")).trim();
+        if (!fullName.isEmpty()) {
+            return fullName;
+        }
+
+        if (user.getRole() == UserRole.ENTREPRISE) {
+            Optional<Company> company = companyRepository.findByUserId(user.getId());
+            if (company.isPresent() && company.get().getRaisonSociale() != null
+                    && !company.get().getRaisonSociale().isBlank()) {
+                return company.get().getRaisonSociale().trim();
+            }
+        }
+
+        if (user.getRole() == UserRole.ECOLE) {
+            Optional<School> school = schoolRepository.findByUserId(user.getId());
+            if (school.isPresent() && school.get().getNomEtablissement() != null
+                    && !school.get().getNomEtablissement().isBlank()) {
+                return school.get().getNomEtablissement().trim();
+            }
+        }
+
+        if (user.getEmail() != null && !user.getEmail().isBlank()) {
+            return user.getEmail().trim();
+        }
+
+        return "Contact";
     }
 
     private MatchProfileSnapshot buildSnapshot(User user) {

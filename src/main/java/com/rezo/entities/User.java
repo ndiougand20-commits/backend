@@ -1,11 +1,11 @@
 package com.rezo.entities;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.rezo.entities.converters.UserRoleConverter;
 import com.rezo.entities.enums.UserRole;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
@@ -47,7 +47,7 @@ public class User {
     @Column(length = 30)
     private String telephone;
 
-    @Enumerated(EnumType.STRING)
+    @Convert(converter = UserRoleConverter.class)
     @Column(nullable = false, length = 20)
     private UserRole role;
 
