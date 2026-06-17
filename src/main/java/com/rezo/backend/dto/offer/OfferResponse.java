@@ -22,6 +22,7 @@ public class OfferResponse {
     private UUID ownerCompanyId;
     private UUID ownerSchoolId;
     private String ownerDisplayName;
+    private String ownerLogoUrl;
     private LocalDateTime createdAt;
 
     public UUID getId() {
@@ -150,6 +151,14 @@ public class OfferResponse {
 
     public void setOwnerDisplayName(String ownerDisplayName) {
         this.ownerDisplayName = ownerDisplayName;
+    }
+
+    public String getOwnerLogoUrl() {
+        return ownerLogoUrl;
+    }
+
+    public void setOwnerLogoUrl(String ownerLogoUrl) {
+        this.ownerLogoUrl = ownerLogoUrl;
     }
 
     public LocalDateTime getCreatedAt() {

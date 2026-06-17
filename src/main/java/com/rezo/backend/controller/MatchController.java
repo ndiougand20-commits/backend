@@ -886,11 +886,13 @@ public class MatchController {
             response.setOwnerCompanyId(offer.getOwnerEntreprise().getId());
             response.setOwnerUserId(offer.getOwnerEntreprise().getUser() != null ? offer.getOwnerEntreprise().getUser().getId() : null);
             response.setOwnerDisplayName(offer.getOwnerEntreprise().getRaisonSociale());
+            response.setOwnerLogoUrl(offer.getOwnerEntreprise().getLogoUrl());
         } else if (offer.getOwnerEcole() != null) {
             response.setOwnerType("ECOLE");
             response.setOwnerSchoolId(offer.getOwnerEcole().getId());
             response.setOwnerUserId(offer.getOwnerEcole().getUser() != null ? offer.getOwnerEcole().getUser().getId() : null);
             response.setOwnerDisplayName(offer.getOwnerEcole().getNomEtablissement());
+            response.setOwnerLogoUrl(offer.getOwnerEcole().getLogoUrl());
         }
         return response;
     }
