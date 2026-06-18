@@ -1,5 +1,6 @@
 package com.rezo.backend.controller;
 
+import com.rezo.backend.dto.common.ApiErrorResponse;
 import com.rezo.backend.dto.message.MessageRequest;
 import com.rezo.backend.dto.message.MessageResponse;
 import com.rezo.backend.service.PackRules;
@@ -137,11 +138,11 @@ public class MessageController {
             LOGGER.info("Message envoye id={} senderId={} receiverId={}", saved.getId(), senderId, receiver.getId());
             return ResponseEntity.status(HttpStatus.CREATED).body(MessageResponse.from(saved));
         } catch (UnauthorizedException exception) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", exception.getMessage());
         } catch (ForbiddenException exception) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.FORBIDDEN, "FORBIDDEN", exception.getMessage());
         } catch (BadRequestException exception) {
-            return ResponseEntity.badRequest().body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.BAD_REQUEST, "BAD_REQUEST", exception.getMessage());
         }
     }
 
@@ -169,11 +170,11 @@ public class MessageController {
                     .toList();
             return ResponseEntity.ok(conversation);
         } catch (UnauthorizedException exception) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", exception.getMessage());
         } catch (ForbiddenException exception) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.FORBIDDEN, "FORBIDDEN", exception.getMessage());
         } catch (BadRequestException exception) {
-            return ResponseEntity.badRequest().body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.BAD_REQUEST, "BAD_REQUEST", exception.getMessage());
         }
     }
 
@@ -229,11 +230,11 @@ public class MessageController {
             response.put("readFilter", read);
             return ResponseEntity.ok(response);
         } catch (UnauthorizedException exception) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", exception.getMessage());
         } catch (ForbiddenException exception) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.FORBIDDEN, "FORBIDDEN", exception.getMessage());
         } catch (BadRequestException exception) {
-            return ResponseEntity.badRequest().body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.BAD_REQUEST, "BAD_REQUEST", exception.getMessage());
         }
     }
 
@@ -253,13 +254,12 @@ public class MessageController {
 
             Optional<Message> optionalMessage = messageRepository.findByIdWithUsersAndOffer(id);
             if (optionalMessage.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Message introuvable"));
+                return error(HttpStatus.NOT_FOUND, "NOT_FOUND", "Message introuvable");
             }
 
             Message message = optionalMessage.get();
             if (message.getReceiver() == null || !currentUser.getId().equals(message.getReceiver().getId())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of("message", "Seul le destinataire peut marquer ce message comme lu"));
+                return error(HttpStatus.FORBIDDEN, "FORBIDDEN", "Seul le destinataire peut marquer ce message comme lu");
             }
 
             message.setRead(true);
@@ -267,9 +267,9 @@ public class MessageController {
             LOGGER.info("Message lu id={} receiverId={}", saved.getId(), currentUser.getId());
             return ResponseEntity.ok(MessageResponse.from(saved));
         } catch (UnauthorizedException exception) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", exception.getMessage());
         } catch (ForbiddenException exception) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.FORBIDDEN, "FORBIDDEN", exception.getMessage());
         }
     }
 
@@ -287,25 +287,30 @@ public class MessageController {
             User currentUser = resolveAuthenticatedUser(principal);
             Optional<Message> optionalMessage = messageRepository.findByIdWithUsersAndOffer(id);
             if (optionalMessage.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Message introuvable"));
+                return error(HttpStatus.NOT_FOUND, "NOT_FOUND", "Message introuvable");
             }
 
             Message message = optionalMessage.get();
             if (message.getSender() == null || !currentUser.getId().equals(message.getSender().getId())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of("message", "Vous ne pouvez supprimer que vos propres messages"));
+                return error(HttpStatus.FORBIDDEN, "FORBIDDEN", "Vous ne pouvez supprimer que vos propres messages");
             }
 
             int deleted = messageRepository.deleteByIdAndSenderId(id, currentUser.getId());
             if (deleted == 0) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Message introuvable"));
+                return error(HttpStatus.NOT_FOUND, "NOT_FOUND", "Message introuvable");
             }
 
             LOGGER.info("Message supprime id={} senderId={}", id, currentUser.getId());
             return ResponseEntity.ok(Map.of("message", "Message supprime avec succes"));
         } catch (UnauthorizedException exception) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", exception.getMessage());
         }
+    }
+
+    private ResponseEntity<ApiErrorResponse> error(HttpStatus status, String code, String message) {
+        return ResponseEntity
+                .status(status)
+                .body(ApiErrorResponse.of(status.value(), code, message, "/api/messages"));
     }
 
     private User resolveAuthenticatedUser(Principal principal) {

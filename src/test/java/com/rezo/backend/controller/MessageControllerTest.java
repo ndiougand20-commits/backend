@@ -122,7 +122,7 @@ class MessageControllerTest {
                                 }
                                 """.formatted(senderId)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Vous ne pouvez pas vous envoyer un message a vous-meme"));
+                .andExpect(jsonPath("$.error.message").value("Vous ne pouvez pas vous envoyer un message a vous-meme"));
     }
 
     @Test
@@ -140,7 +140,7 @@ class MessageControllerTest {
                                 }
                                 """.formatted(receiverId)))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.message").value("Votre pack actuel ne permet pas d'utiliser la messagerie"));
+                .andExpect(jsonPath("$.error.message").value("Votre pack actuel ne permet pas d'utiliser la messagerie"));
     }
 
     @Test
@@ -213,7 +213,7 @@ class MessageControllerTest {
         mockMvc.perform(delete("/api/messages/{id}", messageId)
                         .principal(principal(receiverId)))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.message").value("Vous ne pouvez supprimer que vos propres messages"));
+            .andExpect(jsonPath("$.error.message").value("Vous ne pouvez supprimer que vos propres messages"));
     }
 
     @Test
@@ -232,6 +232,13 @@ class MessageControllerTest {
                 .andExpect(jsonPath("$.message").value("Message supprime avec succes"));
 
         verify(messageRepository).deleteByIdAndSenderId(messageId, senderId);
+    }
+
+    @Test
+    void listMessagesShouldReturn401WhenPrincipalIsMissing() throws Exception {
+        mockMvc.perform(get("/api/messages"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.message").value("Non authentifie"));
     }
 
     private Principal principal(UUID userId) {

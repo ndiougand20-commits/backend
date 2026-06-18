@@ -1,5 +1,7 @@
 package com.rezo.backend.security;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rezo.backend.dto.common.ApiErrorResponse;
 import com.rezo.backend.service.JwtService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -21,6 +23,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(JwtRequestFilter.class);
     private static final String BEARER_PREFIX = "Bearer ";
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final JwtService jwtService;
 
@@ -42,11 +45,19 @@ public class JwtRequestFilter extends OncePerRequestFilter {
 
         String token = authHeader.substring(BEARER_PREFIX.length());
 
-        if (!jwtService.isTokenValid(token)) {
+        if (!jwtService.isAccessTokenValid(token)) {
             LOGGER.warn("Token JWT invalide recu sur {}", request.getRequestURI());
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("application/json");
-            response.getWriter().write("{\"message\":\"Token JWT invalide ou expire\"}");
+            response.setCharacterEncoding("UTF-8");
+            response.getWriter().write(OBJECT_MAPPER.writeValueAsString(
+                ApiErrorResponse.of(
+                    HttpServletResponse.SC_UNAUTHORIZED,
+                    "JWT_INVALID",
+                    "Token JWT invalide ou expire",
+                    request.getRequestURI()
+                )
+            ));
             return;
         }
 

@@ -1,5 +1,7 @@
 package com.rezo.backend.security;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rezo.backend.dto.common.ApiErrorResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -18,6 +20,8 @@ import java.util.List;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
     private final JwtRequestFilter jwtRequestFilter;
 
     public SecurityConfig(JwtRequestFilter jwtRequestFilter) {
@@ -32,7 +36,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         // Public endpoints
-                        .requestMatchers("/api/auth/signup", "/api/auth/login").permitAll()
+                        .requestMatchers("/api/auth/signup", "/api/auth/login", "/api/auth/refresh").permitAll()
                         .requestMatchers("/", "/ping").permitAll()
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/api-docs/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
@@ -67,12 +71,28 @@ public class SecurityConfig {
                         .authenticationEntryPoint((request, response, authException) -> {
                             response.setStatus(401);
                             response.setContentType("application/json");
-                            response.getWriter().write("{\"message\":\"Non authentifie: token JWT manquant ou invalide\"}");
+                        response.setCharacterEncoding("UTF-8");
+                        response.getWriter().write(OBJECT_MAPPER.writeValueAsString(
+                            ApiErrorResponse.of(
+                                401,
+                                "UNAUTHORIZED",
+                                "Non authentifie: token JWT manquant ou invalide",
+                                request.getRequestURI()
+                            )
+                        ));
                         })
                         .accessDeniedHandler((request, response, accessDeniedException) -> {
                             response.setStatus(403);
                             response.setContentType("application/json");
-                            response.getWriter().write("{\"message\":\"Acces refuse: role insuffisant\"}");
+                        response.setCharacterEncoding("UTF-8");
+                        response.getWriter().write(OBJECT_MAPPER.writeValueAsString(
+                            ApiErrorResponse.of(
+                                403,
+                                "FORBIDDEN",
+                                "Acces refuse: role insuffisant",
+                                request.getRequestURI()
+                            )
+                        ));
                         })
                 );
 

@@ -3,6 +3,7 @@ package com.rezo.backend.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rezo.backend.dto.auth.LoginRequest;
 import com.rezo.backend.service.JwtService;
+import com.rezo.backend.service.RefreshTokenService;
 import com.rezo.entities.Pack;
 import com.rezo.entities.User;
 import com.rezo.entities.enums.UserRole;
@@ -23,8 +24,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -50,6 +54,9 @@ class AuthControllerLoginTest {
 
     @Mock
     private JwtService jwtService;
+
+    @Mock
+    private RefreshTokenService refreshTokenService;
 
     @Mock
     private Environment environment;
@@ -80,6 +87,7 @@ class AuthControllerLoginTest {
                 companyRepository,
                 schoolRepository,
                 jwtService,
+                refreshTokenService,
                 environment
         );
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
@@ -91,6 +99,7 @@ class AuthControllerLoginTest {
         User user = buildUser("alice@rezo.com", "secret");
         when(userRepository.findByEmail("alice@rezo.com")).thenReturn(Optional.of(user));
         when(jwtService.generateToken(any(User.class))).thenReturn("fake.jwt.token");
+        when(refreshTokenService.issueRefreshToken(any(User.class))).thenReturn("fake.refresh.token");
 
         LoginRequest request = new LoginRequest();
         request.setEmail("alice@rezo.com");
@@ -100,7 +109,8 @@ class AuthControllerLoginTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").value("fake.jwt.token"));
+                .andExpect(jsonPath("$.token").value("fake.jwt.token"))
+                .andExpect(jsonPath("$.refreshToken").value("fake.refresh.token"));
     }
 
     @Test
@@ -116,7 +126,7 @@ class AuthControllerLoginTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.message").value("Email ou mot de passe incorrect"));
+                .andExpect(jsonPath("$.error.message").value("Email ou mot de passe incorrect"));
     }
 
     @Test
@@ -131,7 +141,7 @@ class AuthControllerLoginTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.message").value("Email ou mot de passe incorrect"));
+                .andExpect(jsonPath("$.error.message").value("Email ou mot de passe incorrect"));
     }
 
     @Test
@@ -143,7 +153,7 @@ class AuthControllerLoginTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Email et mot de passe obligatoires"));
+                .andExpect(jsonPath("$.error.message").value("Email et mot de passe obligatoires"));
     }
 
     @Test
@@ -155,6 +165,46 @@ class AuthControllerLoginTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Email et mot de passe obligatoires"));
+                .andExpect(jsonPath("$.error.message").value("Email et mot de passe obligatoires"));
     }
+
+            @Test
+            void shouldRefreshTokenSuccessfully() throws Exception {
+            when(refreshTokenService.rotateRefreshToken("valid-refresh-token"))
+                .thenReturn(new RefreshTokenService.TokenPair("new.access.token", "new.refresh.token"));
+
+            mockMvc.perform(post("/api/auth/refresh")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"refreshToken\":\"valid-refresh-token\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").value("new.access.token"))
+                .andExpect(jsonPath("$.refreshToken").value("new.refresh.token"));
+            }
+
+            @Test
+            void shouldReturn401WhenRefreshTokenIsInvalid() throws Exception {
+            when(refreshTokenService.rotateRefreshToken("invalid-token"))
+                .thenThrow(new IllegalArgumentException("Refresh token invalide ou expire"));
+
+            mockMvc.perform(post("/api/auth/refresh")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"refreshToken\":\"invalid-token\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.message").value("Refresh token invalide ou expire"));
+            }
+
+            @Test
+            void shouldLogoutAndRevokeTokens() throws Exception {
+            String userId = UUID.randomUUID().toString();
+
+            mockMvc.perform(post("/api/auth/logout")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .principal(() -> userId)
+                    .content("{\"refreshToken\":\"refresh-to-revoke\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Logout reussi"));
+
+            verify(refreshTokenService).revokeByToken(eq("refresh-to-revoke"));
+            verify(refreshTokenService).revokeAllForUser(eq(UUID.fromString(userId)));
+            }
 }

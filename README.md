@@ -1,5 +1,26 @@
 # REZO Backend
 
+> **🎊 STATUS: SOUTENANCE READY** ✅  
+> **Tests**: 66/66 PASSING  
+> **Documentation**: Complete (Algorithm + Architecture + KPI Analysis)
+
+---
+
+## 📖 Quick Links (For Thesis Presentation)
+
+### Must Read First
+- **[QUICK_START.md](QUICK_START.md)** - 60-second overview (5 min read)
+- **[SOUTENANCE_SUMMARY.md](SOUTENANCE_SUMMARY.md)** - Executive summary (10 min read)
+
+### Detailed Documentation
+- **[docs/MATCHING_ALGORITHM.md](docs/MATCHING_ALGORITHM.md)** - Algorithm formula + weights + comparisons (15 min read)
+- **[docs/ARCHITECTURE_DIAGRAMS.md](docs/ARCHITECTURE_DIAGRAMS.md)** - 7 system architecture diagrams (10 min read)
+
+### Tools & Scripts
+- **[scripts/analyze_kpi.py](scripts/analyze_kpi.py)** - Python KPI analysis
+- **[scripts/verify_soutenance_ready.sh](scripts/verify_soutenance_ready.sh)** - Verification script
+
+---
 ---
 
 ## Description

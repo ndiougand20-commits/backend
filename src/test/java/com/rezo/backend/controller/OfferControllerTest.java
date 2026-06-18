@@ -136,7 +136,7 @@ class OfferControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validRequest())))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.message").value("Seuls les utilisateurs ECOLE ou ENTREPRISE peuvent publier une offre"));
+            .andExpect(jsonPath("$.error.message").value("Seuls les utilisateurs ECOLE ou ENTREPRISE peuvent publier une offre"));
     }
 
     @Test
@@ -158,7 +158,7 @@ class OfferControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validRequest())))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.message").value("Votre pack actuel ne permet pas de publier ou gerer des offres"));
+            .andExpect(jsonPath("$.error.message").value("Votre pack actuel ne permet pas de publier ou gerer des offres"));
     }
 
     @Test
@@ -179,7 +179,7 @@ class OfferControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.message").value("Vous ne pouvez modifier que votre propre offre"));
+            .andExpect(jsonPath("$.error.message").value("Vous ne pouvez modifier que votre propre offre"));
     }
 
     @Test
@@ -216,7 +216,7 @@ class OfferControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("dateDebut doit etre strictement avant dateFin"));
+            .andExpect(jsonPath("$.error.message").value("dateDebut doit etre strictement avant dateFin"));
     }
 
     @Test
@@ -236,7 +236,7 @@ class OfferControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("type doit etre STAGE ou EMPLOI"));
+            .andExpect(jsonPath("$.error.message").value("type doit etre STAGE ou EMPLOI"));
     }
 
     private OfferRequest validRequest() {

@@ -3,6 +3,7 @@ package com.rezo.backend.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rezo.backend.dto.auth.SignupRequest;
 import com.rezo.backend.service.JwtService;
+import com.rezo.backend.service.RefreshTokenService;
 import com.rezo.entities.Pack;
 import com.rezo.entities.Profile;
 import com.rezo.entities.User;
@@ -58,6 +59,9 @@ class AuthControllerSignupTest {
     private JwtService jwtService;
 
     @Mock
+    private RefreshTokenService refreshTokenService;
+
+    @Mock
     private Environment environment;
 
     private MockMvc mockMvc;
@@ -72,6 +76,7 @@ class AuthControllerSignupTest {
                 companyRepository,
                 schoolRepository,
                 jwtService,
+                refreshTokenService,
                 environment
         );
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
@@ -126,7 +131,7 @@ class AuthControllerSignupTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.message").value("Email deja utilise"));
+                .andExpect(jsonPath("$.error.message").value("Email deja utilise"));
 
         verify(userRepository, never()).save(any(User.class));
     }
@@ -145,7 +150,7 @@ class AuthControllerSignupTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Champ profil obligatoire manquant: nomEtablissement/nom_etablissement"));
+                .andExpect(jsonPath("$.error.message").value("Champ profil obligatoire manquant: nomEtablissement/nom_etablissement"));
 
         verify(userRepository, never()).save(any(User.class));
     }
@@ -175,7 +180,7 @@ class AuthControllerSignupTest {
 
         mockMvc.perform(delete("/api/auth/users/by-email/absent@rezo.com"))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.message").value("Utilisateur introuvable"));
+            .andExpect(jsonPath("$.error.message").value("Utilisateur introuvable"));
 
         verify(userRepository, never()).deleteByIdDirect(any(UUID.class));
     }

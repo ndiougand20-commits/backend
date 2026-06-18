@@ -1,10 +1,15 @@
 package com.rezo.backend.controller;
 
+import com.rezo.backend.dto.common.ApiErrorResponse;
 import com.rezo.backend.dto.auth.LoginRequest;
 import com.rezo.backend.dto.auth.LoginResponse;
+import com.rezo.backend.dto.auth.LogoutRequest;
+import com.rezo.backend.dto.auth.RefreshRequest;
+import com.rezo.backend.dto.auth.RefreshResponse;
 import com.rezo.backend.dto.auth.SignupRequest;
 import com.rezo.backend.dto.auth.SignupResponse;
 import com.rezo.backend.service.JwtService;
+import com.rezo.backend.service.RefreshTokenService;
 import com.rezo.entities.Company;
 import com.rezo.entities.Pack;
 import com.rezo.entities.Profile;
@@ -44,6 +49,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.security.Principal;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -58,6 +64,7 @@ public class AuthController {
     private final SchoolRepository schoolRepository;
     private final BCryptPasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final RefreshTokenService refreshTokenService;
     private final Environment environment;
 
     public AuthController(
@@ -67,6 +74,7 @@ public class AuthController {
             CompanyRepository companyRepository,
             SchoolRepository schoolRepository,
             JwtService jwtService,
+                RefreshTokenService refreshTokenService,
             Environment environment
     ) {
         this.userRepository = userRepository;
@@ -76,6 +84,7 @@ public class AuthController {
         this.schoolRepository = schoolRepository;
         this.passwordEncoder = new BCryptPasswordEncoder();
         this.jwtService = jwtService;
+        this.refreshTokenService = refreshTokenService;
         this.environment = environment;
     }
 
@@ -94,8 +103,7 @@ public class AuthController {
 
             if (userRepository.existsByEmail(request.getEmail().trim().toLowerCase(Locale.ROOT))) {
                 LOGGER.warn("Signup refuse: email deja utilise ({})", request.getEmail());
-                return ResponseEntity.status(HttpStatus.CONFLICT)
-                        .body(Map.of("message", "Email deja utilise"));
+                return error(HttpStatus.CONFLICT, "CONFLICT", "Email deja utilise");
             }
 
             Map<String, Object> profil = Optional.ofNullable(request.getProfil()).orElse(Collections.emptyMap());
@@ -124,7 +132,7 @@ public class AuthController {
                     ));
         } catch (BadRequestException exception) {
             LOGGER.warn("Signup invalide: {}", exception.getMessage());
-            return ResponseEntity.badRequest().body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.BAD_REQUEST, "BAD_REQUEST", exception.getMessage());
         }
     }
 
@@ -137,16 +145,65 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
         if (request == null || isBlank(request.getEmail()) || isBlank(request.getPassword())) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Email et mot de passe obligatoires"));
+            return error(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "Email et mot de passe obligatoires");
         }
         Optional<User> optUser = userRepository.findByEmail(request.getEmail().trim().toLowerCase(Locale.ROOT));
         if (optUser.isEmpty() || !passwordEncoder.matches(request.getPassword(), optUser.get().getPasswordHash())) {
             LOGGER.warn("Login echoue pour email={}", request.getEmail());
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Email ou mot de passe incorrect"));
+            return error(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Email ou mot de passe incorrect");
         }
         String token = jwtService.generateToken(optUser.get());
+        String refreshToken = refreshTokenService.issueRefreshToken(optUser.get());
         LOGGER.info("Login reussi pour email={}", optUser.get().getEmail());
-        return ResponseEntity.ok(new LoginResponse(token));
+        return ResponseEntity.ok(new LoginResponse(token, refreshToken));
+    }
+
+    @Operation(summary = "Refresh token", description = "Renouvelle le token d'acces via un refresh token valide")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Token renouvele"),
+            @ApiResponse(responseCode = "400", description = "Payload invalide"),
+            @ApiResponse(responseCode = "401", description = "Refresh token invalide ou expire")
+    })
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refresh(@RequestBody RefreshRequest request) {
+        if (request == null || isBlank(request.getRefreshToken())) {
+            return error(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "Refresh token obligatoire");
+        }
+
+        try {
+            RefreshTokenService.TokenPair tokenPair =
+                    refreshTokenService.rotateRefreshToken(request.getRefreshToken().trim());
+            return ResponseEntity.ok(new RefreshResponse(tokenPair.accessToken(), tokenPair.refreshToken()));
+        } catch (IllegalArgumentException exception) {
+            LOGGER.warn("Refresh refuse: {}", exception.getMessage());
+            return error(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", exception.getMessage());
+        }
+    }
+
+    @Operation(summary = "Logout", description = "Invalide les refresh tokens de la session courante")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Logout reussi"),
+            @ApiResponse(responseCode = "401", description = "Non authentifie")
+    })
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(@RequestBody(required = false) LogoutRequest request, Principal principal) {
+        if (principal == null || isBlank(principal.getName())) {
+            return error(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Non authentifie");
+        }
+
+        UUID userId;
+        try {
+            userId = UUID.fromString(principal.getName());
+        } catch (IllegalArgumentException exception) {
+            return error(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Session invalide");
+        }
+
+        if (request != null && !isBlank(request.getRefreshToken())) {
+            refreshTokenService.revokeByToken(request.getRefreshToken().trim());
+        }
+        refreshTokenService.revokeAllForUser(userId);
+
+        return ResponseEntity.ok(Map.of("message", "Logout reussi"));
     }
 
     @Operation(summary = "Suppression tous les utilisateurs (dev/test)", description = "⚠️ DANGER: Supprime TOUS les comptes Users et leurs profils. Utiliser UNIQUEMENT en dev/test.")
@@ -158,8 +215,7 @@ public class AuthController {
     @Transactional
     public ResponseEntity<?> deleteAllUsers() {
         if (!isDevProfileActive()) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("message", "Endpoint disponible uniquement en environnement dev"));
+            return error(HttpStatus.FORBIDDEN, "FORBIDDEN", "Endpoint disponible uniquement en environnement dev");
         }
         try {
             profileRepository.deleteAll();
@@ -171,8 +227,7 @@ public class AuthController {
             return ResponseEntity.ok(Map.of("message", "Tous les utilisateurs ont ete supprimes", "count", deletedCount));
         } catch (Exception exception) {
             LOGGER.error("Erreur lors de la suppression en masse: {}", exception.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("message", "Erreur lors de la suppression de masse"));
+            return error(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR", "Erreur lors de la suppression de masse");
         }
     }
 
@@ -187,19 +242,17 @@ public class AuthController {
     @Transactional
     public ResponseEntity<?> deleteUserByEmail(@PathVariable("email") String email) {
         if (!isDevProfileActive()) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("message", "Endpoint disponible uniquement en environnement dev"));
+            return error(HttpStatus.FORBIDDEN, "FORBIDDEN", "Endpoint disponible uniquement en environnement dev");
         }
         String normalizedEmail = email == null ? null : email.trim().toLowerCase(Locale.ROOT);
         if (isBlank(normalizedEmail)) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Le parametre email est obligatoire"));
+            return error(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "Le parametre email est obligatoire");
         }
 
         Optional<UUID> optionalUserId = userRepository.findIdByEmail(normalizedEmail);
         if (optionalUserId.isEmpty()) {
             LOGGER.warn("Suppression impossible: email introuvable ({})", normalizedEmail);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("message", "Utilisateur introuvable"));
+            return error(HttpStatus.NOT_FOUND, "NOT_FOUND", "Utilisateur introuvable");
         }
 
         try {
@@ -210,17 +263,21 @@ public class AuthController {
             schoolRepository.deleteAllByUserId(userId);
             int deletedUsers = userRepository.deleteByIdDirect(userId);
             if (deletedUsers == 0) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(Map.of("message", "Utilisateur introuvable"));
+                return error(HttpStatus.NOT_FOUND, "NOT_FOUND", "Utilisateur introuvable");
             }
 
             LOGGER.info("Suppression reussie pour email={}", normalizedEmail);
             return ResponseEntity.ok(Map.of("message", "Utilisateur supprime"));
         } catch (DataIntegrityViolationException exception) {
             LOGGER.warn("Suppression refusee pour email={} cause={}", normalizedEmail, exception.getMessage());
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(Map.of("message", "Suppression impossible: dependances existantes"));
+            return error(HttpStatus.CONFLICT, "CONFLICT", "Suppression impossible: dependances existantes");
         }
+    }
+
+    private ResponseEntity<ApiErrorResponse> error(HttpStatus status, String code, String message) {
+        return ResponseEntity
+                .status(status)
+                .body(ApiErrorResponse.of(status.value(), code, message, "/api/auth"));
     }
 
     private void validateBasePayload(SignupRequest request) {

@@ -52,7 +52,7 @@ class JwtSecurityTest {
 
     @Test
     void shouldReturn401WhenTokenIsInvalid() throws Exception {
-        when(jwtService.isTokenValid("bad.token.here")).thenReturn(false);
+        when(jwtService.isAccessTokenValid("bad.token.here")).thenReturn(false);
 
         mockMvc.perform(get("/api/protected")
                         .header("Authorization", "Bearer bad.token.here"))
@@ -61,7 +61,7 @@ class JwtSecurityTest {
 
     @Test
     void shouldReturn200WhenTokenIsValid() throws Exception {
-        when(jwtService.isTokenValid("valid.token")).thenReturn(true);
+        when(jwtService.isAccessTokenValid("valid.token")).thenReturn(true);
         when(jwtService.extractSubject("valid.token")).thenReturn("user-id-123");
         when(jwtService.extractRole("valid.token")).thenReturn("ETUDIANT");
 
@@ -89,7 +89,7 @@ class JwtSecurityTest {
 
     @Test
     void shouldSetAuthenticationContextOnValidToken() throws Exception {
-        when(jwtService.isTokenValid("role.token")).thenReturn(true);
+        when(jwtService.isAccessTokenValid("role.token")).thenReturn(true);
         when(jwtService.extractSubject("role.token")).thenReturn("user-42");
         when(jwtService.extractRole("role.token")).thenReturn("ADMIN");
 

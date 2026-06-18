@@ -99,14 +99,19 @@ public class UserController {
     @GetMapping("/me")
     @Transactional
     public ResponseEntity<?> getMe(Principal principal) {
-        UUID userId = extractUserId(principal);
-        Optional<User> optUser = userRepository.findByIdWithPack(userId);
-        if (optUser.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("message", "Utilisateur introuvable"));
+        try {
+            UUID userId = extractUserId(principal);
+            Optional<User> optUser = userRepository.findByIdWithPack(userId);
+            if (optUser.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("message", "Utilisateur introuvable"));
+            }
+            User user = optUser.get();
+            return ResponseEntity.ok(toMeResponse(user));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Non authentifie"));
         }
-        User user = optUser.get();
-        return ResponseEntity.ok(toMeResponse(user));
     }
 
     @Operation(summary = "Mes statistiques", description = "Retourne les stats principales du dashboard")
@@ -118,14 +123,19 @@ public class UserController {
     @GetMapping("/me/stats")
     @Transactional
     public ResponseEntity<?> getMyStats(Principal principal) {
-        UUID userId = extractUserId(principal);
-        Optional<User> optUser = userRepository.findByIdWithPack(userId);
-        if (optUser.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("message", "Utilisateur introuvable"));
+        try {
+            UUID userId = extractUserId(principal);
+            Optional<User> optUser = userRepository.findByIdWithPack(userId);
+            if (optUser.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("message", "Utilisateur introuvable"));
+            }
+            User user = optUser.get();
+            return ResponseEntity.ok(buildStatsResponse(user));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Non authentifie"));
         }
-        User user = optUser.get();
-        return ResponseEntity.ok(buildStatsResponse(user));
     }
 
     // ─── PUT /api/users/me ───────────────────────────────────────────────
@@ -141,58 +151,63 @@ public class UserController {
     @PutMapping("/me")
     @Transactional
     public ResponseEntity<?> updateMe(@RequestBody UpdateUserRequest request, Principal principal) {
-        UUID userId = extractUserId(principal);
-        Optional<User> optUser = userRepository.findByIdWithPack(userId);
-        if (optUser.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("message", "Utilisateur introuvable"));
-        }
-        User user = optUser.get();
+        try {
+            UUID userId = extractUserId(principal);
+            Optional<User> optUser = userRepository.findByIdWithPack(userId);
+            if (optUser.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("message", "Utilisateur introuvable"));
+            }
+            User user = optUser.get();
 
-        // --- Update user fields (only non-null fields) ---
-        if (request.getEmail() != null) {
-            String newEmail = request.getEmail().trim().toLowerCase(Locale.ROOT);
-            if (newEmail.isBlank()) {
-                return ResponseEntity.badRequest().body(Map.of("message", "L'email ne peut pas etre vide"));
+            // --- Update user fields (only non-null fields) ---
+            if (request.getEmail() != null) {
+                String newEmail = request.getEmail().trim().toLowerCase(Locale.ROOT);
+                if (newEmail.isBlank()) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "L'email ne peut pas etre vide"));
+                }
+                if (!newEmail.equals(user.getEmail()) && userRepository.existsByEmail(newEmail)) {
+                    return ResponseEntity.status(HttpStatus.CONFLICT)
+                            .body(Map.of("message", "Email deja utilise"));
+                }
+                user.setEmail(newEmail);
             }
-            if (!newEmail.equals(user.getEmail()) && userRepository.existsByEmail(newEmail)) {
-                return ResponseEntity.status(HttpStatus.CONFLICT)
-                        .body(Map.of("message", "Email deja utilise"));
+            if (request.getPrenom() != null) {
+                if (request.getPrenom().isBlank()) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "Le prenom ne peut pas etre vide"));
+                }
+                user.setPrenom(request.getPrenom().trim());
             }
-            user.setEmail(newEmail);
-        }
-        if (request.getPrenom() != null) {
-            if (request.getPrenom().isBlank()) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Le prenom ne peut pas etre vide"));
+            if (request.getNom() != null) {
+                if (request.getNom().isBlank()) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "Le nom ne peut pas etre vide"));
+                }
+                user.setNom(request.getNom().trim());
             }
-            user.setPrenom(request.getPrenom().trim());
-        }
-        if (request.getNom() != null) {
-            if (request.getNom().isBlank()) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Le nom ne peut pas etre vide"));
+            if (request.getTelephone() != null) {
+                user.setTelephone(request.getTelephone().trim());
             }
-            user.setNom(request.getNom().trim());
-        }
-        if (request.getTelephone() != null) {
-            user.setTelephone(request.getTelephone().trim());
-        }
-        if (request.getAvatarUrl() != null) {
-            user.setAvatarUrl(request.getAvatarUrl().trim());
-        }
-        userRepository.save(user);
+            if (request.getAvatarUrl() != null) {
+                user.setAvatarUrl(request.getAvatarUrl().trim());
+            }
+            userRepository.save(user);
 
-        // --- Update role-specific profile ---
-        Map<String, Object> profilData = request.getProfil() != null ? request.getProfil() : Collections.emptyMap();
-        if (!profilData.isEmpty()) {
-            try {
-                updateRoleProfile(user, profilData);
-            } catch (BadRequestException e) {
-                return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+            // --- Update role-specific profile ---
+            Map<String, Object> profilData = request.getProfil() != null ? request.getProfil() : Collections.emptyMap();
+            if (!profilData.isEmpty()) {
+                try {
+                    updateRoleProfile(user, profilData);
+                } catch (BadRequestException e) {
+                    return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+                }
             }
-        }
 
-        LOGGER.info("Profil mis a jour pour userId={}", userId);
-        return ResponseEntity.ok(toMeResponse(user));
+            LOGGER.info("Profil mis a jour pour userId={}", userId);
+            return ResponseEntity.ok(toMeResponse(user));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Non authentifie"));
+        }
     }
 
     // ─── PUT /api/users/me/pack ──────────────────────────────────────────
@@ -207,33 +222,38 @@ public class UserController {
     @org.springframework.web.bind.annotation.RequestMapping(value = "/me/pack", method = {org.springframework.web.bind.annotation.RequestMethod.PUT, org.springframework.web.bind.annotation.RequestMethod.PATCH})
     @Transactional
     public ResponseEntity<?> updateMyPack(@RequestBody UserPackUpdateRequest request, Principal principal) {
-        UUID userId = extractUserId(principal);
-        if (request == null || request.getPackId() == null) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Le champ packId est obligatoire"));
-        }
+        try {
+            UUID userId = extractUserId(principal);
+            if (request == null || request.getPackId() == null) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Le champ packId est obligatoire"));
+            }
 
-        Optional<User> optUser = userRepository.findByIdWithPack(userId);
-        if (optUser.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("message", "Utilisateur introuvable"));
-        }
+            Optional<User> optUser = userRepository.findByIdWithPack(userId);
+            if (optUser.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("message", "Utilisateur introuvable"));
+            }
 
-        Optional<Pack> optPack = packRepository.findById(request.getPackId());
-        if (optPack.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("message", "Pack introuvable"));
-        }
+            Optional<Pack> optPack = packRepository.findById(request.getPackId());
+            if (optPack.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("message", "Pack introuvable"));
+            }
 
-        User user = optUser.get();
-        Pack pack = optPack.get();
-        if (!PackRules.isPackCompatible(pack, user.getRole())) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Ce pack n'est pas compatible avec votre role"));
-        }
+            User user = optUser.get();
+            Pack pack = optPack.get();
+            if (!PackRules.isPackCompatible(pack, user.getRole())) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Ce pack n'est pas compatible avec votre role"));
+            }
 
-        user.setPack(pack);
-        userRepository.save(user);
-        LOGGER.info("Pack mis a jour pour userId={} pack={}", userId, pack.getNom());
-        return ResponseEntity.ok(toMeResponse(user));
+            user.setPack(pack);
+            userRepository.save(user);
+            LOGGER.info("Pack mis a jour pour userId={} pack={}", userId, pack.getNom());
+            return ResponseEntity.ok(toMeResponse(user));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Non authentifie"));
+        }
     }
 
     // ─── DELETE /api/users/me ────────────────────────────────────────────
@@ -247,25 +267,33 @@ public class UserController {
     @DeleteMapping("/me")
     @Transactional
     public ResponseEntity<?> deleteMe(Principal principal) {
-        UUID userId = extractUserId(principal);
+        try {
+            UUID userId = extractUserId(principal);
 
-        if (!userRepository.existsById(userId)) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("message", "Utilisateur introuvable"));
+            if (!userRepository.existsById(userId)) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("message", "Utilisateur introuvable"));
+            }
+
+            profileRepository.deleteAllByUserId(userId);
+            companyRepository.deleteAllByUserId(userId);
+            schoolRepository.deleteAllByUserId(userId);
+            userRepository.deleteByIdDirect(userId);
+
+            LOGGER.info("Compte supprime pour userId={}", userId);
+            return ResponseEntity.ok(Map.of("message", "Compte supprime avec succes"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Non authentifie"));
         }
-
-        profileRepository.deleteAllByUserId(userId);
-        companyRepository.deleteAllByUserId(userId);
-        schoolRepository.deleteAllByUserId(userId);
-        userRepository.deleteByIdDirect(userId);
-
-        LOGGER.info("Compte supprime pour userId={}", userId);
-        return ResponseEntity.ok(Map.of("message", "Compte supprime avec succes"));
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────
 
     private UUID extractUserId(Principal principal) {
+        if (principal == null || principal.getName() == null || principal.getName().isBlank()) {
+            throw new IllegalArgumentException("Non authentifie");
+        }
         return UUID.fromString(principal.getName());
     }
 

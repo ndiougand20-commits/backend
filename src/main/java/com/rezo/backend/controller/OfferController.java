@@ -1,5 +1,6 @@
 package com.rezo.backend.controller;
 
+import com.rezo.backend.dto.common.ApiErrorResponse;
 import com.rezo.backend.dto.offer.OfferRequest;
 import com.rezo.backend.dto.offer.OfferResponse;
 import com.rezo.backend.service.PackRules;
@@ -96,8 +97,7 @@ public class OfferController {
     public ResponseEntity<?> getOfferById(@PathVariable UUID id) {
         return offerRepository.findByIdWithOwners(id)
                 .<ResponseEntity<?>>map(offer -> ResponseEntity.ok(toResponse(offer)))
-                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(Map.of("message", "Offre introuvable")));
+            .orElseGet(() -> error(HttpStatus.NOT_FOUND, "NOT_FOUND", "Offre introuvable"));
     }
 
     @Operation(summary = "Utilisateurs ayant aime une offre", description = "Retourne la liste des utilisateurs qui ont swipe LIKE sur cette offre. Accessible uniquement par le proprietaire de l'offre.")
@@ -115,11 +115,10 @@ public class OfferController {
             User user = resolveAuthenticatedUser(principal);
             Optional<UUID> optionalOwnerUserId = offerRepository.findOwnerUserIdById(id);
             if (optionalOwnerUserId.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Offre introuvable"));
+                return error(HttpStatus.NOT_FOUND, "NOT_FOUND", "Offre introuvable");
             }
             if (!optionalOwnerUserId.get().equals(user.getId())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of("message", "Acces reserve au proprietaire de l'offre"));
+                return error(HttpStatus.FORBIDDEN, "FORBIDDEN", "Acces reserve au proprietaire de l'offre");
             }
             List<User> likers = swipeRepository.findLikersByOfferId(id, SwipeAction.LIKE);
             List<Map<String, Object>> result = likers.stream()
@@ -140,9 +139,9 @@ public class OfferController {
             LOGGER.info("liked-by offerId={} ownerId={} count={}", id, user.getId(), result.size());
             return ResponseEntity.ok(body);
         } catch (UnauthorizedException exception) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", exception.getMessage());
         } catch (ForbiddenException exception) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.FORBIDDEN, "FORBIDDEN", exception.getMessage());
         }
     }
 
@@ -169,13 +168,13 @@ public class OfferController {
             LOGGER.info("Offre creee id={} userId={} type={}", offer.getId(), user.getId(), offer.getType());
             return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(offer));
         } catch (UnauthorizedException exception) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", exception.getMessage());
         } catch (ForbiddenException exception) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.FORBIDDEN, "FORBIDDEN", exception.getMessage());
         } catch (ConflictException exception) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.CONFLICT, "CONFLICT", exception.getMessage());
         } catch (BadRequestException exception) {
-            return ResponseEntity.badRequest().body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.BAD_REQUEST, "BAD_REQUEST", exception.getMessage());
         }
     }
 
@@ -195,12 +194,11 @@ public class OfferController {
             User user = resolveAuthenticatedUser(principal);
             Optional<Offer> optionalOffer = offerRepository.findByIdWithOwners(id);
             if (optionalOffer.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Offre introuvable"));
+                return error(HttpStatus.NOT_FOUND, "NOT_FOUND", "Offre introuvable");
             }
             Offer offer = optionalOffer.get();
             if (!resolveOwnerUserId(offer).equals(user.getId())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of("message", "Vous ne pouvez modifier que votre propre offre"));
+                return error(HttpStatus.FORBIDDEN, "FORBIDDEN", "Vous ne pouvez modifier que votre propre offre");
             }
             ensurePackAllowsOfferManagement(user);
             applyRequest(offer, request, false);
@@ -208,11 +206,11 @@ public class OfferController {
             LOGGER.info("Offre mise a jour id={} userId={}", offer.getId(), user.getId());
             return ResponseEntity.ok(toResponse(offer));
         } catch (UnauthorizedException exception) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", exception.getMessage());
         } catch (ForbiddenException exception) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.FORBIDDEN, "FORBIDDEN", exception.getMessage());
         } catch (BadRequestException exception) {
-            return ResponseEntity.badRequest().body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.BAD_REQUEST, "BAD_REQUEST", exception.getMessage());
         }
     }
 
@@ -231,23 +229,22 @@ public class OfferController {
             User user = resolveAuthenticatedUser(principal);
             Optional<UUID> optionalOwnerUserId = offerRepository.findOwnerUserIdById(id);
             if (optionalOwnerUserId.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Offre introuvable"));
+                return error(HttpStatus.NOT_FOUND, "NOT_FOUND", "Offre introuvable");
             }
             if (!optionalOwnerUserId.get().equals(user.getId())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of("message", "Vous ne pouvez supprimer que votre propre offre"));
+                return error(HttpStatus.FORBIDDEN, "FORBIDDEN", "Vous ne pouvez supprimer que votre propre offre");
             }
             ensurePackAllowsOfferManagement(user);
             int deleted = offerRepository.deleteByIdDirect(id);
             if (deleted == 0) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Offre introuvable"));
+                return error(HttpStatus.NOT_FOUND, "NOT_FOUND", "Offre introuvable");
             }
             LOGGER.info("Offre supprimee id={} userId={}", id, user.getId());
             return ResponseEntity.ok(Map.of("message", "Offre supprimee avec succes"));
         } catch (UnauthorizedException exception) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", exception.getMessage());
         } catch (ForbiddenException exception) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.FORBIDDEN, "FORBIDDEN", exception.getMessage());
         }
     }
 
@@ -271,13 +268,12 @@ public class OfferController {
             User user = resolveAuthenticatedUser(principal);
             Optional<Offer> optionalOffer = offerRepository.findByIdWithOwners(id);
             if (optionalOffer.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Offre introuvable"));
+                return error(HttpStatus.NOT_FOUND, "NOT_FOUND", "Offre introuvable");
             }
 
             Offer offer = optionalOffer.get();
             if (!resolveOwnerUserId(offer).equals(user.getId())) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of("message", "Vous ne pouvez joindre un media qu'a votre propre offre"));
+                return error(HttpStatus.FORBIDDEN, "FORBIDDEN", "Vous ne pouvez joindre un media qu'a votre propre offre");
             }
             ensurePackAllowsOfferManagement(user);
 
@@ -291,12 +287,18 @@ public class OfferController {
             body.put("message", "PDF d'offre enregistre avec succes");
             return ResponseEntity.ok(body);
         } catch (UnauthorizedException exception) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", exception.getMessage());
         } catch (ForbiddenException exception) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.FORBIDDEN, "FORBIDDEN", exception.getMessage());
         } catch (UserMediaStorageService.MediaValidationException exception) {
-            return ResponseEntity.badRequest().body(Map.of("message", exception.getMessage()));
+            return error(HttpStatus.BAD_REQUEST, "BAD_REQUEST", exception.getMessage());
         }
+    }
+
+    private ResponseEntity<ApiErrorResponse> error(HttpStatus status, String code, String message) {
+        return ResponseEntity
+                .status(status)
+                .body(ApiErrorResponse.of(status.value(), code, message, "/api/offers"));
     }
 
     private User resolveAuthenticatedUser(Principal principal) {
